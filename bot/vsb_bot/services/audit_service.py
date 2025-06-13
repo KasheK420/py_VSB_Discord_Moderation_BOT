@@ -1,8 +1,9 @@
-from utils.logger import get_logger
-from service import Service
 import discord
 import datetime
-from configuration import Configuration
+
+from ..configuration import Configuration
+from ..utils.logger import get_logger
+from ..service import Service
 
 # Set up logging
 logger = get_logger("audit_service")

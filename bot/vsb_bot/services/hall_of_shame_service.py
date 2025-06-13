@@ -3,10 +3,11 @@ import os
 import random
 import discord
 import re
-from configuration import Configuration
-from service import Service
-from utils.logger import get_logger
-from utils.tenor_api_gif import get_tenor_gif
+
+from ..configuration import Configuration
+from ..service import Service
+from ..utils.logger import get_logger
+from ..utils.tenor_api_gif import get_tenor_gif
 
 logger = get_logger("hall_of_shame_service")
 

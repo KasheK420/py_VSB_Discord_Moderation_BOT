@@ -1,5 +1,6 @@
 import discord
-from startup import client, services
+
+from .startup import client, services
 
 # ----------------------------------------------------------------------
 # MESSAGE EVENTS

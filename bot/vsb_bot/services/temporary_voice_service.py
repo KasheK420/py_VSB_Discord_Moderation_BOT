@@ -1,10 +1,12 @@
 import discord
 import asyncio
 import time
+
 from datetime import datetime
-from configuration import Configuration
-from service import Service
-from utils.logger import get_logger
+
+from ..configuration import Configuration
+from ..service import Service
+from ..utils.logger import get_logger
 
 logger = get_logger("temporary_voice_service")
 

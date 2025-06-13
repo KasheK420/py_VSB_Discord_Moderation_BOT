@@ -1,8 +1,10 @@
 import discord
+
 from discord import app_commands
-from configuration import Configuration
-from service import Service
-from utils.logger import get_logger
+
+from ..configuration import Configuration
+from ..service import Service
+from ..utils.logger import get_logger
 
 # Initialize logger for this service
 logger = get_logger("reaction_service")

@@ -1,8 +1,9 @@
 import asyncio
 import discord
-from configuration import Configuration
-from service import Service
-from utils.logger import get_logger
+
+from ..configuration import Configuration
+from ..service import Service
+from ..utils.logger import get_logger
 
 # Initialize logger for this service
 logger = get_logger("meme_antitext_service")

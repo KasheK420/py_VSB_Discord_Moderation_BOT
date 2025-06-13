@@ -1,6 +1,7 @@
 import discord
-from service import Service
-from utils.logger import get_logger
+
+from ..service import Service
+from ..utils.logger import get_logger
 
 # Initialize logger for this service
 logger = get_logger("logger_service")

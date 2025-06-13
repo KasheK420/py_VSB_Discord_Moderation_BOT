@@ -1,8 +1,8 @@
 import re
 import discord
-from configuration import Configuration
-from service import Service
-from utils.logger import get_logger
+
+from ..service import Service
+from ..utils.logger import get_logger
 
 # Initialize logger for this service
 logger = get_logger("slowmode_service")
