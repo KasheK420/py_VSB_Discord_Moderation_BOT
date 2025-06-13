@@ -1,4 +1,5 @@
 import re
+
 import discord
 
 from ..service import Service
@@ -6,6 +7,7 @@ from ..utils.logger import get_logger
 
 # Initialize logger for this service
 logger = get_logger("slowmode_service")
+
 
 def __service__():
     return SlowmodeService()
@@ -15,11 +17,7 @@ class SlowmodeService(Service):
     def __init__(self):
         super().__init__()
         # Load admin role IDs from configuration.json
-        self.admin_roles = [
-            631140434332221462,
-            689908370018402343,
-            689908435235766275
-        ]
+        self.admin_roles = [631140434332221462, 689908370018402343, 689908435235766275]
 
     def __start__(self):
         # Log that the service has started

@@ -1,4 +1,5 @@
 import asyncio
+
 import discord
 
 from ..configuration import Configuration
@@ -30,10 +31,13 @@ class MemeAntiTextService(Service):
 
         await asyncio.sleep(1)  # Introduces a delay to ensure the message is fetched
         await message.fetch()
-        if ((len(message.attachments) > 0 and (
-                message.attachments[0].content_type.startswith("image/") or 
-                message.attachments[0].content_type.startswith("video/")))
-                or (len(message.embeds) > 0 and message.embeds[0].type in ["video", "image", "gifv"])):
+        if (
+            len(message.attachments) > 0
+            and (
+                message.attachments[0].content_type.startswith("image/")
+                or message.attachments[0].content_type.startswith("video/")
+            )
+        ) or (len(message.embeds) > 0 and message.embeds[0].type in ["video", "image", "gifv"]):
             return
 
         await message.delete()

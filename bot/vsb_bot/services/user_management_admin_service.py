@@ -1,6 +1,6 @@
 import datetime
-import discord
 
+import discord
 from discord import app_commands
 from discord.app_commands.checks import has_permissions
 
@@ -33,13 +33,18 @@ class UserManagementAdminService(Service):
                 logger.info(f"Changed nickname for {user.name} to {nickname}")
             except Exception as e:
                 logger.error(f"Failed to change nickname for {user.name}: {e}")
-                await interaction.response.send_message("Failed to change the nickname. Check permissions.",
-                                                        ephemeral=True)
+                await interaction.response.send_message(
+                    "Failed to change the nickname. Check permissions.", ephemeral=True
+                )
 
         @self.commands.command(name="kick", description="Kick a user from the server.")
         @app_commands.describe(user="The user to kick.", reason="The reason for kicking the user.")
         @has_permissions(administrator=True)
-        async def kick(interaction: discord.Interaction, user: discord.Member, reason: str = "No reason provided."):
+        async def kick(
+            interaction: discord.Interaction,
+            user: discord.Member,
+            reason: str = "No reason provided.",
+        ):
             try:
                 await user.kick(reason=reason)
                 await interaction.response.send_message(f"{user.mention} has been kicked. Reason: {reason}")
@@ -51,7 +56,11 @@ class UserManagementAdminService(Service):
         @self.commands.command(name="ban", description="Ban a user from the server.")
         @app_commands.describe(user="The user to ban.", reason="The reason for banning the user.")
         @has_permissions(administrator=True)
-        async def ban(interaction: discord.Interaction, user: discord.Member, reason: str = "No reason provided."):
+        async def ban(
+            interaction: discord.Interaction,
+            user: discord.Member,
+            reason: str = "No reason provided.",
+        ):
             try:
                 await user.ban(reason=reason)
                 await interaction.response.send_message(f"{user.mention} has been banned. Reason: {reason}")
@@ -61,7 +70,10 @@ class UserManagementAdminService(Service):
                 await interaction.response.send_message("Failed to ban the user. Check permissions.", ephemeral=True)
 
         @self.commands.command(name="timeout", description="Timeout a user.")
-        @app_commands.describe(user="The user to timeout.", duration="The duration of the timeout in seconds.")
+        @app_commands.describe(
+            user="The user to timeout.",
+            duration="The duration of the timeout in seconds.",
+        )
         @has_permissions(administrator=True)
         async def timeout(interaction: discord.Interaction, user: discord.Member, duration: int):
             try:
@@ -70,8 +82,9 @@ class UserManagementAdminService(Service):
                 logger.info(f"Timed out {user.name} for {duration} seconds.")
             except Exception as e:
                 logger.error(f"Failed to timeout {user.name}: {e}")
-                await interaction.response.send_message("Failed to timeout the user. Check permissions.",
-                                                        ephemeral=True)
+                await interaction.response.send_message(
+                    "Failed to timeout the user. Check permissions.", ephemeral=True
+                )
 
         @self.commands.command(name="purge", description="Delete multiple messages at once.")
         @app_commands.describe(amount="Number of messages to delete.")
@@ -175,8 +188,7 @@ class UserManagementAdminService(Service):
             warnings = Configuration.get("warnings", {}).get(str(user.id), [])
             if warnings:
                 await interaction.response.send_message(
-                    f"{user.mention} has the following warnings:\n" +
-                    "\n".join([f"- {w}" for w in warnings])
+                    f"{user.mention} has the following warnings:\n" + "\n".join([f"- {w}" for w in warnings])
                 )
             else:
                 await interaction.response.send_message(f"{user.mention} has no warnings.")
@@ -212,8 +224,9 @@ class UserManagementAdminService(Service):
                 logger.info(f"Locked channel {interaction.channel.name}.")
             except Exception as e:
                 logger.error(f"Failed to lock channel {interaction.channel.name}: {e}")
-                await interaction.response.send_message("Failed to lock the channel. Check permissions.",
-                                                        ephemeral=True)
+                await interaction.response.send_message(
+                    "Failed to lock the channel. Check permissions.", ephemeral=True
+                )
 
         @self.commands.command(name="unlock", description="Unlock a channel.")
         @has_permissions(administrator=True)
@@ -227,8 +240,9 @@ class UserManagementAdminService(Service):
                 logger.info(f"Unlocked channel {interaction.channel.name}.")
             except Exception as e:
                 logger.error(f"Failed to unlock channel {interaction.channel.name}: {e}")
-                await interaction.response.send_message("Failed to unlock the channel. Check permissions.",
-                                                        ephemeral=True)
+                await interaction.response.send_message(
+                    "Failed to unlock the channel. Check permissions.", ephemeral=True
+                )
 
     async def on_ready(self):
         logger.info("UserManagementAdminService is ready!")

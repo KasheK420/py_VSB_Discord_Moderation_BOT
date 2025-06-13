@@ -1,4 +1,5 @@
 import random
+
 import discord
 
 from ..configuration import Configuration
@@ -57,7 +58,7 @@ class WelcomeService(Service):
             embed = discord.Embed(
                 title="Welcome to the Server! 🎉",
                 description=welcome_text,
-                color=discord.Color.blue()
+                color=discord.Color.blue(),
             )
             if gif_url:
                 embed.set_image(url=gif_url)
@@ -72,6 +73,7 @@ class WelcomeService(Service):
         Generate a dynamic welcome message for the new member.
         """
         import random
+
         if not self.text_templates:
             return f"Welcome, {member.mention}!"
         return random.choice(self.text_templates).format(user=member.mention)

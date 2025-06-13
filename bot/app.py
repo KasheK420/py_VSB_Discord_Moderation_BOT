@@ -6,6 +6,7 @@ def main(args):
     # (future proofing) Až se to přepíše a udělá se z toho funkce/třída tak tam passnout případné spouštěcí argumenty
     import vsb_bot.startup
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # parser.add_argument(...)

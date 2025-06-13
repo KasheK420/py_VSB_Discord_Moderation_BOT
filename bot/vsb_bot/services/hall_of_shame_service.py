@@ -1,8 +1,9 @@
 import datetime
 import os
 import random
-import discord
 import re
+
+import discord
 
 from ..configuration import Configuration
 from ..service import Service
@@ -43,7 +44,7 @@ class HallOfShameService(Service):
 
     def _detect_bad_words(self, content: str) -> list:
         content_lower = content.lower()
-        return [word for word in self.bad_words if re.search(rf'\b{re.escape(word.lower())}\b', content_lower)]
+        return [word for word in self.bad_words if re.search(rf"\b{re.escape(word.lower())}\b", content_lower)]
 
     async def _process_infraction(self, message: discord.Message, bad_words: list):
         try:
@@ -64,25 +65,18 @@ class HallOfShameService(Service):
 
             # Create Hall of Shame embed
             hos_channel = self.server.get_channel(self.hos_channel_id)
-            embed = discord.Embed(
-                title="🚨 Rule Violation Detected",
-                color=discord.Color.red()
-            )
+            embed = discord.Embed(title="🚨 Rule Violation Detected", color=discord.Color.red())
             embed.add_field(
                 name="Offending User",
                 value=f"{message.author.mention} ({message.author.id})",
-                inline=False
+                inline=False,
             )
             embed.add_field(
                 name="Original Message",
                 value=self._highlight_bad_words(message.content, bad_words),
-                inline=False
+                inline=False,
             )
-            embed.add_field(
-                name="Detected Words",
-                value=', '.join(bad_words),
-                inline=False
-            )
+            embed.add_field(name="Detected Words", value=", ".join(bad_words), inline=False)
 
             # Add GIF
             gif_url = get_tenor_gif(random.choice(bad_words), self.tenor_api_key)
@@ -95,7 +89,7 @@ class HallOfShameService(Service):
 
     def _highlight_bad_words(self, text: str, bad_words: list) -> str:
         for word in bad_words:
-            text = re.sub(rf'\b({re.escape(word)})\b', r'**\1**', text, flags=re.IGNORECASE)
+            text = re.sub(rf"\b({re.escape(word)})\b", r"**\1**", text, flags=re.IGNORECASE)
         return text
 
     async def _send_user_warning(self, user: discord.User, bad_words: list):
@@ -103,8 +97,8 @@ class HallOfShameService(Service):
             embed = discord.Embed(
                 title="⚠️ Content Warning",
                 description=f"You used prohibited words: {', '.join(bad_words)}\n"
-                            "Repeated violations will result in mutes/bans!",
-                color=discord.Color.orange()
+                "Repeated violations will result in mutes/bans!",
+                color=discord.Color.orange(),
             )
             await user.send(embed=embed)
         except discord.Forbidden:

@@ -7,7 +7,9 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = []
+dev = [
+    "ruff>=0.11.13",
+]
 bot = [
     "vsb-bot",
 ]
@@ -25,3 +27,33 @@ exclude = ["*"]
 package = false
 default-groups = ["dev", "bot"]
 index-strategy = "unsafe-best-match"
+
+# See https://docs.astral.sh/ruff/settings/ for more information
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+exclude = [
+    ".venv",
+]
+
+[tool.ruff.lint]
+select = [
+    # pycodestyle
+    "E",
+    # flakes
+    "F",
+    # isort
+    "I",
+]
+
+[tool.ruff.lint.isort]
+force-single-line = true
+no-lines-before = ["local-folder"]
+
+[tool.ruff.lint.pycodestyle]
+max-doc-length = 160
+
+[tool.ruff.lint.per-file-ignores]
+# F401: 'module' imported but unused
+# I001: isort found an import in the wrong position
+"app.py" = ["F401", "I001"]

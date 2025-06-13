@@ -6,10 +6,15 @@ def instance_dump(instance):
     if type(instance) is int or type(instance) is float:
         return str(instance)
 
-    source = instance.__slots__ if hasattr(instance, "__slots__") else instance.__dict__ if hasattr(instance,
-                                                                                                    "__dict__") else []
+    source = (
+        instance.__slots__
+        if hasattr(instance, "__slots__")
+        else instance.__dict__
+        if hasattr(instance, "__dict__")
+        else []
+    )
     source = filter(lambda x: not x.startswith("_"), source)
-    return f"{{{', '.join([f"{x} = {instance_dump(__get_attribute(instance, x))}" for x in source])}}}"
+    return f"{{{', '.join([f'{x} = {instance_dump(__get_attribute(instance, x))}' for x in source])}}}"
 
 
 def __get_attribute(instance, attr):
