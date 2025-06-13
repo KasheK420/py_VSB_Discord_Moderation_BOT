@@ -1,8 +1,9 @@
 import random
 import discord
-from configuration import Configuration
-from service import Service
-from utils.logger import get_logger
+
+from ..configuration import Configuration
+from ..service import Service
+from ..utils.logger import get_logger
 
 # Initialize logger for this service
 logger = get_logger("welcome_service")
@@ -81,7 +82,7 @@ class WelcomeService(Service):
         """
         try:
             # Import get_tenor_gif lazily to avoid circular imports
-            from utils.tenor_api_gif import get_tenor_gif
+            from ..utils.tenor_api_gif import get_tenor_gif
 
             if not self.gif_keywords:
                 return None

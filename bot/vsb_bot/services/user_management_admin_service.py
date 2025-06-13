@@ -1,11 +1,12 @@
-import discord
-from discord import app_commands
-from configuration import Configuration
-from service import Service
-from typing import Callable, List
-from utils.logger import get_logger
-from discord.app_commands.checks import has_permissions
 import datetime
+import discord
+
+from discord import app_commands
+from discord.app_commands.checks import has_permissions
+
+from ..configuration import Configuration
+from ..service import Service
+from ..utils.logger import get_logger
 
 # Initialize logger
 logger = get_logger("user_management_admin")

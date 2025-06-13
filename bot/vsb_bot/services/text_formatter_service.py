@@ -1,10 +1,12 @@
 import discord
+
 from discord import app_commands
-from typing import Callable, List
-from service import Service
-from utils.logger import get_logger
-from configuration import Configuration
 from discord.app_commands.checks import has_permissions
+
+from ..service import Service
+from ..utils.logger import get_logger
+
+
 
 # Initialize logger
 logger = get_logger("text_formatter_service")

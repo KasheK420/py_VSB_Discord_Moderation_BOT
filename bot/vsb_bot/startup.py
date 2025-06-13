@@ -1,9 +1,11 @@
 import importlib
 import os
 import discord
+
 from discord import app_commands
-from configuration import Configuration
-from utils.logger import get_logger
+
+from .configuration import Configuration
+from .utils.logger import get_logger
 
 # Initialize logger
 logger = get_logger("vsb")

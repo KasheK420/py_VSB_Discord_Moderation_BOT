@@ -1,7 +1,9 @@
 import discord
+
 from discord import app_commands
-from service import Service
-from utils.logger import get_logger
+
+from ..service import Service
+from ..utils.logger import get_logger
 
 # Initialize logger
 logger = get_logger("user_management_self")

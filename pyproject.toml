@@ -1,0 +1,27 @@
+[project]
+name = "vsb-discord-moderation"
+version = "0.0.1"
+requires-python = "==3.11.*"
+dependencies = [
+    "vsb-bot",
+]
+
+[dependency-groups]
+dev = []
+bot = [
+    "vsb-bot",
+]
+
+[tool.uv.sources]
+vsb-bot = { workspace = true }
+
+[tool.uv.workspace]
+members = ["bot"]
+
+[tool.setuptools.packages.find]
+exclude = ["*"]
+
+[tool.uv]
+package = false
+default-groups = ["dev", "bot"]
+index-strategy = "unsafe-best-match"

@@ -1,7 +1,8 @@
 import requests
 import json
 import random
-from utils.logger import get_logger
+
+from .logger import get_logger
 
 # Initialize logger for this module
 logger = get_logger("tenor_api_gif")

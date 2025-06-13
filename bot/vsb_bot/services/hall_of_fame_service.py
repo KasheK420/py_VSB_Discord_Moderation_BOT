@@ -1,7 +1,8 @@
 import discord
-from configuration import Configuration
-from service import Service
-from utils.logger import get_logger
+
+from ..configuration import Configuration
+from ..service import Service
+from ..utils.logger import get_logger
 
 logger = get_logger("hall_of_fame_service")
 

@@ -1,8 +1,10 @@
 import asyncio
+
 from datetime import datetime, timedelta
 from discord import app_commands, Interaction
-from service import Service
-from utils.logger import get_logger
+
+from ..service import Service
+from ..utils.logger import get_logger
 
 # Initialize logger
 logger = get_logger("remindme_service")

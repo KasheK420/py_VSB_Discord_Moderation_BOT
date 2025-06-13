@@ -1,11 +1,11 @@
 import json
-
 import discord
+
 from discord import app_commands
 from discord.app_commands.checks import has_permissions
 
-from configuration import Configuration
-from service import Service
+from ..configuration import Configuration
+from ..service import Service
 
 
 def __service__():
