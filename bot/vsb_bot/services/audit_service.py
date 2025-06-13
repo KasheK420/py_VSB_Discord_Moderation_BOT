@@ -1,9 +1,10 @@
-import discord
 import datetime
 
+import discord
+
 from ..configuration import Configuration
-from ..utils.logger import get_logger
 from ..service import Service
+from ..utils.logger import get_logger
 
 # Set up logging
 logger = get_logger("audit_service")
@@ -39,7 +40,7 @@ class AuditService(Service):
                 title="Message Edited",
                 description=f"[Jump to Message]({after.jump_url})",
                 timestamp=datetime.datetime.now(),
-                color=discord.Colour.from_rgb(255, 255, 0)
+                color=discord.Colour.from_rgb(255, 255, 0),
             )
             embed.set_footer(text=f"Edited by: {after.author.name}#{after.author.discriminator}")
             embed.add_field(name="Channel", value=after.channel.mention, inline=True)
@@ -66,7 +67,7 @@ class AuditService(Service):
                 title="Message Deleted",
                 description=f"Channel: {message.channel.mention}",
                 timestamp=datetime.datetime.now(),
-                color=discord.Colour.from_rgb(255, 0, 0)
+                color=discord.Colour.from_rgb(255, 0, 0),
             )
             embed.set_footer(text=f"Deleted by: {message.author.name}#{message.author.discriminator}")
             embed.add_field(name="Content", value=message.content or "*Empty*", inline=False)

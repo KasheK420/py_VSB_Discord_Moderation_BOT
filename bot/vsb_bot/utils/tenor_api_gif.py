@@ -1,6 +1,7 @@
-import requests
 import json
 import random
+
+import requests
 
 from .logger import get_logger
 

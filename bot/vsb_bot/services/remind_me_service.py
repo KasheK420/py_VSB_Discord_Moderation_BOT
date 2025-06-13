@@ -1,7 +1,9 @@
 import asyncio
+from datetime import datetime
+from datetime import timedelta
 
-from datetime import datetime, timedelta
-from discord import app_commands, Interaction
+from discord import Interaction
+from discord import app_commands
 
 from ..service import Service
 from ..utils.logger import get_logger
@@ -45,19 +47,19 @@ class RemindMeService(Service):
         """
         Register the slash commands for reminders.
         """
+
         @self.commands.command(name="remindme", description="Set a reminder.")
-        @app_commands.describe(text="What should I remind you about?", time="When should I remind you? (e.g., 'tomorrow')")
+        @app_commands.describe(
+            text="What should I remind you about?",
+            time="When should I remind you? (e.g., 'tomorrow')",
+        )
         async def remindme(interaction: Interaction, text: str, time: str):
             """
             Set a reminder with a text and time.
             """
             try:
                 reminder_time = self.parse_time(time)
-                self.reminders.append({
-                    "user": interaction.user,
-                    "text": text,
-                    "time": reminder_time
-                })
+                self.reminders.append({"user": interaction.user, "text": text, "time": reminder_time})
                 await interaction.response.send_message(f"⏰ Reminder set for {reminder_time}.", ephemeral=True)
                 logger.info(f"Reminder set by {interaction.user.name}: {text} at {reminder_time}")
             except ValueError as e:

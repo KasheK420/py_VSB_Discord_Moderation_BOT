@@ -1,7 +1,7 @@
 import importlib
 import os
-import discord
 
+import discord
 from discord import app_commands
 
 from .configuration import Configuration
@@ -48,6 +48,7 @@ for file in os.listdir("services"):
     except Exception as e:
         logger.error(f"Failed to load service {service_name}: {e}")
 
+
 # Client events
 @client.event
 async def on_ready():
@@ -77,6 +78,7 @@ async def on_ready():
     await client.change_presence(status=discord.Status.online, activity=activity)
 
     logger.info(f"Bot ready. Services loaded: {len(services)}")
+
 
 # Import events
 importlib.import_module("events")

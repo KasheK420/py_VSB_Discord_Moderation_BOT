@@ -1,10 +1,12 @@
 import discord
 
-from .startup import client, services
+from .startup import client
+from .startup import services
 
 # ----------------------------------------------------------------------
 # MESSAGE EVENTS
 # ----------------------------------------------------------------------
+
 
 @client.event
 async def on_message(message: discord.Message):
@@ -35,9 +37,11 @@ async def on_message_delete(message: discord.Message):
     for service in services:
         await service.on_message_delete(message)
 
+
 # ----------------------------------------------------------------------
 # MEMBER EVENTS
 # ----------------------------------------------------------------------
+
 
 @client.event
 async def on_member_join(member: discord.Member):
@@ -68,9 +72,11 @@ async def on_member_update(before: discord.Member, after: discord.Member):
     for service in services:
         await service.on_member_update(before, after)
 
+
 # ----------------------------------------------------------------------
 # REACTION EVENTS
 # ----------------------------------------------------------------------
+
 
 @client.event
 async def on_reaction_add(reaction: discord.Reaction, user: discord.User):
@@ -91,9 +97,11 @@ async def on_reaction_remove(reaction: discord.Reaction, user: discord.User):
     for service in services:
         await service.on_reaction_remove(reaction, user)
 
+
 # ----------------------------------------------------------------------
 # VOICE EVENTS
 # ----------------------------------------------------------------------
+
 
 @client.event
 async def on_voice_state_update(member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
@@ -104,9 +112,11 @@ async def on_voice_state_update(member: discord.Member, before: discord.VoiceSta
     for service in services:
         await service.on_voice_state_update(member, before, after)
 
+
 # ----------------------------------------------------------------------
 # CHANNEL EVENTS
 # ----------------------------------------------------------------------
+
 
 @client.event
 async def on_guild_channel_create(channel: discord.abc.GuildChannel):
@@ -137,9 +147,11 @@ async def on_guild_channel_update(before: discord.abc.GuildChannel, after: disco
     for service in services:
         await service.on_guild_channel_update(before, after)
 
+
 # ----------------------------------------------------------------------
 # GUILD (SERVER) EVENTS
 # ----------------------------------------------------------------------
+
 
 @client.event
 async def on_guild_join(guild: discord.Guild):
@@ -170,9 +182,11 @@ async def on_guild_update(before: discord.Guild, after: discord.Guild):
     for service in services:
         await service.on_guild_update(before, after)
 
+
 # ----------------------------------------------------------------------
 # ROLE EVENTS
 # ----------------------------------------------------------------------
+
 
 @client.event
 async def on_guild_role_create(role: discord.Role):
@@ -203,9 +217,11 @@ async def on_guild_role_update(before: discord.Role, after: discord.Role):
     for service in services:
         await service.on_guild_role_update(before, after)
 
+
 # ----------------------------------------------------------------------
 # MODERATION EVENTS
 # ----------------------------------------------------------------------
+
 
 @client.event
 async def on_member_ban(guild: discord.Guild, user: discord.User):

@@ -1,6 +1,6 @@
-import discord
+from abc import ABC
 
-from abc import abstractmethod, ABC
+import discord
 from discord import app_commands
 
 
@@ -50,7 +50,12 @@ class Service(ABC):
         pass
 
     # VOICE EVENTS
-    async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
+    async def on_voice_state_update(
+        self,
+        member: discord.Member,
+        before: discord.VoiceState,
+        after: discord.VoiceState,
+    ):
         pass
 
     # CHANNEL EVENTS

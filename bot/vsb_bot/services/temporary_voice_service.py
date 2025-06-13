@@ -1,8 +1,8 @@
-import discord
 import asyncio
 import time
-
 from datetime import datetime
+
+import discord
 
 from ..configuration import Configuration
 from ..service import Service
@@ -10,8 +10,10 @@ from ..utils.logger import get_logger
 
 logger = get_logger("temporary_voice_service")
 
+
 def __service__():
     return TemporaryVoiceService()
+
 
 class TemporaryVoiceService(Service):
     def __init__(self):
@@ -22,11 +24,11 @@ class TemporaryVoiceService(Service):
         self.category_id = config.get("category")
         self.cooldown = config.get("cooldown", 3600)
         self.default_slots = config.get("default_slots", 5)
-        
+
         # Get role IDs from configuration
         self.host_role_id = Configuration.get("roles.host")
         self.student_role_id = Configuration.get("roles.student")
-        
+
         self.temp_channels = {}
         self.user_cooldowns = {}
 
@@ -35,7 +37,12 @@ class TemporaryVoiceService(Service):
             logger.error("Temporary Voice Service configuration incomplete!")
         logger.info("TemporaryVoiceService started!")
 
-    async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
+    async def on_voice_state_update(
+        self,
+        member: discord.Member,
+        before: discord.VoiceState,
+        after: discord.VoiceState,
+    ):
         try:
             # Handle channel creation
             if after.channel and after.channel.id == self.creator_channel_id:
@@ -61,18 +68,9 @@ class TemporaryVoiceService(Service):
             # Base permissions
             overwrites = {
                 guild.default_role: discord.PermissionOverwrite(connect=False),
-                host_role: discord.PermissionOverwrite(
-                    connect=True,
-                    manage_channels=True,
-                    move_members=True
-                ),
-                student_role: discord.PermissionOverwrite(
-                    connect=True,
-                    speak=True
-                ),
-                member: discord.PermissionOverwrite(
-                    manage_channels=True
-                )
+                host_role: discord.PermissionOverwrite(connect=True, manage_channels=True, move_members=True),
+                student_role: discord.PermissionOverwrite(connect=True, speak=True),
+                member: discord.PermissionOverwrite(manage_channels=True),
             }
 
             # Create category if not exists
@@ -84,13 +82,13 @@ class TemporaryVoiceService(Service):
             new_channel = await category.create_voice_channel(
                 name=f"{member.display_name}'s Room",
                 overwrites=overwrites,
-                user_limit=self.default_slots
+                user_limit=self.default_slots,
             )
 
             await member.move_to(new_channel)
             self.temp_channels[member.id] = new_channel.id
             self.user_cooldowns[member.id] = time.time()
-            
+
             await self._send_creation_log(member, new_channel)
 
         except Exception as e:
@@ -131,16 +129,16 @@ class TemporaryVoiceService(Service):
             embed = discord.Embed(
                 title="🎧 New Temporary Voice Channel Created",
                 color=discord.Color.blurple(),
-                timestamp=datetime.now()
+                timestamp=datetime.now(),
             )
             embed.add_field(name="User", value=member.mention, inline=True)
             embed.add_field(name="Channel", value=channel.mention, inline=True)
             embed.add_field(
-                name="Instructions", 
+                name="Instructions",
                 value="• You have full control over this channel\n"
-                      "• Default limit is 5 users\n"
-                      "• Channel will auto-delete when empty\n"
-                      "• You can create another channel in 1 hour",
-                inline=False
+                "• Default limit is 5 users\n"
+                "• Channel will auto-delete when empty\n"
+                "• You can create another channel in 1 hour",
+                inline=False,
             )
             await log_channel.send(embed=embed)

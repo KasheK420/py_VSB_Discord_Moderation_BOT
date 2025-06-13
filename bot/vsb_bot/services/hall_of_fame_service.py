@@ -6,8 +6,10 @@ from ..utils.logger import get_logger
 
 logger = get_logger("hall_of_fame_service")
 
+
 def __service__():
     return HallOfFameService()
+
 
 class HallOfFameService(Service):
     def __init__(self):
@@ -43,21 +45,17 @@ class HallOfFameService(Service):
             embed = discord.Embed(
                 title="🌟 Hall of Fame Entry",
                 description=message.content,
-                color=discord.Color.gold()
+                color=discord.Color.gold(),
             )
             embed.set_author(
                 name=message.author.display_name,
-                icon_url=message.author.display_avatar.url
+                icon_url=message.author.display_avatar.url,
             )
-            embed.add_field(
-                name="Original Channel",
-                value=message.channel.mention,
-                inline=True
-            )
+            embed.add_field(name="Original Channel", value=message.channel.mention, inline=True)
             embed.add_field(
                 name="Reactions",
                 value=sum(r.count for r in message.reactions),
-                inline=True
+                inline=True,
             )
 
             # Add attachments if present
