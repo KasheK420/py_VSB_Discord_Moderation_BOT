@@ -52,3 +52,8 @@ no-lines-before = ["local-folder"]
 
 [tool.ruff.lint.pycodestyle]
 max-doc-length = 160
+
+[tool.ruff.lint.per-file-ignores]
+# F401: 'module' imported but unused
+# I001: isort found an import in the wrong position
+"app.py" = ["F401", "I001"]
