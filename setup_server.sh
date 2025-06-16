@@ -99,12 +99,11 @@ chown -R github-runner:github-runner /home/github-runner
 
 # Clone repository
 print_status "Cloning repository..."
-if [ -d "$BOT_DIR/.git" ]; then
-    cd "$BOT_DIR"
-    sudo -u "$BOT_USER" git pull
-else
-    sudo -u "$BOT_USER" git clone "$REPO_URL" "$BOT_DIR"
+if [ -d "$BOT_DIR" ]; then
+    print_status "Removing existing directory..."
+    rm -rf "$BOT_DIR"
 fi
+sudo -u "$BOT_USER" git clone "$REPO_URL" "$BOT_DIR"
 
 # Set permissions
 chown -R "$BOT_USER":"$BOT_USER" "$BOT_DIR"
