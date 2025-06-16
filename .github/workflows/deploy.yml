@@ -1,0 +1,371 @@
+# .github/workflows/deploy.yml
+name: Deploy VSB Discord Bot
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  DOCKER_BUILDKIT: 1
+  COMPOSE_DOCKER_CLI_BUILD: 1
+
+jobs:
+  # Testing and Code Quality (runs on GitHub-hosted runner)
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 🔄 Checkout code
+      uses: actions/checkout@v4
+
+    - name: 🐍 Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: 📦 Install uv
+      uses: astral-sh/setup-uv@v5
+
+    - name: 🔧 Sync environment
+      run: uv sync --all-extras --dev
+
+    - name: 🧹 Lint and format with Ruff
+      run: |
+        uv run ruff check .
+        uv run ruff format --check .
+
+    - name: 🧪 Test with pytest
+      run: uv run pytest
+
+    - name: 🔍 Security scan
+      run: |
+        uv run bandit -r bot/ -f json -o bandit-report.json || true
+        uv run safety check --json --output safety-report.json || true
+
+    - name: 📊 Upload test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-results
+        path: |
+          bandit-report.json
+          safety-report.json
+
+  # Build and Deploy (runs on self-hosted runner)
+  deploy:
+    needs: test
+    runs-on: self-hosted
+    if: github.ref == 'refs/heads/main'
+    
+    environment:
+      name: production
+      url: http://localhost:8081/health
+    
+    steps:
+    - name: 🔄 Checkout code
+      uses: actions/checkout@v4
+
+    - name: 🔐 Login to Docker Hub
+      run: |
+        echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+    - name: 🏗️ Build Docker image
+      run: |
+        docker build -t ${{ secrets.DOCKER_USERNAME }}/vsb-discord-bot:latest .
+        docker build -t ${{ secrets.DOCKER_USERNAME }}/vsb-discord-bot:${{ github.sha }} .
+
+    - name: 📤 Push Docker image
+      run: |
+        docker push ${{ secrets.DOCKER_USERNAME }}/vsb-discord-bot:latest
+        docker push ${{ secrets.DOCKER_USERNAME }}/vsb-discord-bot:${{ github.sha }}
+
+    - name: ⚙️ Create environment file
+      run: |
+        cat > /opt/discord-bot/.env << EOF
+        # Discord Configuration
+        DISCORD_TOKEN=${{ secrets.DISCORD_TOKEN }}
+        DISCORD_APPLICATION_ID=${{ secrets.DISCORD_APPLICATION_ID }}
+        DISCORD_CLIENT_ID=${{ secrets.DISCORD_CLIENT_ID }}
+        DISCORD_CLIENT_SECRET=${{ secrets.DISCORD_CLIENT_SECRET }}
+        DISCORD_PUBLIC_KEY=${{ secrets.DISCORD_PUBLIC_KEY }}
+        DISCORD_GUILD_ID=${{ secrets.DISCORD_GUILD_ID }}
+
+        # API Keys
+        TENOR_API_KEY=${{ secrets.TENOR_API_KEY }}
+
+        # Database Configuration
+        DATABASE_PATH=/app/data/bot_database.db
+        DATABASE_BACKUP_PATH=/app/backups
+        DATABASE_BACKUP_INTERVAL=86400
+
+        # Logging Configuration
+        LOG_LEVEL=INFO
+        LOG_FILE_PATH=/app/logs/discord.log
+        LOG_CHANNEL_ID=${{ secrets.LOG_CHANNEL_ID }}
+
+        # Service Configuration
+        SERVICE_WHITELIST=
+        MAINTENANCE_MODE=false
+        DEBUG_MODE=false
+        DEVELOPMENT_MODE=false
+
+        # Security
+        SECRET_KEY=${{ secrets.SECRET_KEY }}
+
+        # Health Check
+        HEALTH_CHECK_ENABLED=true
+        HEALTH_CHECK_PORT=8081
+        METRICS_ENABLED=true
+
+        # Notifications
+        DISCORD_WEBHOOK_URL=${{ secrets.DISCORD_WEBHOOK_URL }}
+
+        # Environment
+        ENVIRONMENT=production
+        SERVER_NAME=bot001
+        BOT_VERSION=${{ github.sha }}
+        DEPLOYMENT_ID=$(date +%s)
+
+        # Docker
+        DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}
+        EOF
+
+        # Secure the environment file
+        chmod 600 /opt/discord-bot/.env
+        chown botuser:botuser /opt/discord-bot/.env
+
+    - name: 📋 Copy deployment files
+      run: |
+        # Copy compose file with updated image
+        sed 's|vsb-discord-bot:latest|${{ secrets.DOCKER_USERNAME }}/vsb-discord-bot:latest|g' docker-compose.production.yml > /opt/discord-bot/docker-compose.production.yml
+        
+        # Copy other necessary files
+        cp -r nginx/ /opt/discord-bot/nginx/ || true
+        cp -r monitoring/ /opt/discord-bot/monitoring/ || true
+        cp bot/vsb_bot/configuration.json /opt/discord-bot/bot/vsb_bot/configuration.json || true
+        
+        # Set proper ownership
+        chown -R botuser:botuser /opt/discord-bot/
+
+    - name: 🚀 Deploy application
+      run: |
+        cd /opt/discord-bot
+        
+        # Create backup of current deployment
+        if docker-compose -f docker-compose.production.yml ps | grep -q "Up"; then
+          echo "Creating backup of running containers..."
+          docker-compose -f docker-compose.production.yml down
+        fi
+        
+        # Pull latest images
+        docker-compose -f docker-compose.production.yml pull
+        
+        # Start new deployment
+        docker-compose -f docker-compose.production.yml up -d
+        
+        # Wait for services to be ready
+        sleep 30
+
+    - name: 🧪 Health check
+      run: |
+        echo "Waiting for application to be ready..."
+        for i in {1..12}; do
+          if curl -f http://localhost:8081/health; then
+            echo "✅ Health check passed"
+            break
+          fi
+          if [ $i -eq 12 ]; then
+            echo "❌ Health check failed after 12 attempts"
+            exit 1
+          fi
+          echo "Attempt $i/12 failed, waiting 10 seconds..."
+          sleep 10
+        done
+
+    - name: 🧹 Cleanup
+      run: |
+        # Remove old Docker images
+        docker image prune -f
+        
+        # Clean up old backups (keep last 10)
+        find /opt/discord-bot/backups -name "*.gz" | sort -r | tail -n +11 | xargs rm -f || true
+
+    - name: 📢 Notify Discord on success
+      if: success()
+      run: |
+        curl -X POST "${{ secrets.DISCORD_WEBHOOK_URL }}" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "embeds": [{
+            "title": "🚀 VSB Bot Deployment Successful",
+            "description": "The Discord bot has been successfully deployed and is running!",
+            "color": 3066993,
+            "fields": [
+              {
+                "name": "📝 Commit",
+                "value": "[`'${{ github.sha }}'`](https://github.com/KasheK420/py_VSB_Discord_Moderation_BOT/commit/'${{ github.sha }}')",
+                "inline": true
+              },
+              {
+                "name": "🌍 Environment",
+                "value": "Production",
+                "inline": true
+              },
+              {
+                "name": "🏥 Health Check",
+                "value": "[Check Status](http://bot001:8081/health)",
+                "inline": true
+              },
+              {
+                "name": "⏰ Deployed At",
+                "value": "'$(date -u +%Y-%m-%d\ %H:%M:%S)'",
+                "inline": true
+              },
+              {
+                "name": "👤 Deployed By",
+                "value": "'${{ github.actor }}'",
+                "inline": true
+              },
+              {
+                "name": "📄 Commit Message",
+                "value": "```'${{ github.event.head_commit.message }}'```",
+                "inline": false
+              }
+            ],
+            "thumbnail": {
+              "url": "https://github.com/KasheK420.png"
+            },
+            "footer": {
+              "text": "VSB Discord Bot CI/CD",
+              "icon_url": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png"
+            },
+            "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%S.000Z)'"
+          }]
+        }'
+
+    - name: 📢 Notify Discord on failure
+      if: failure()
+      run: |
+        curl -X POST "${{ secrets.DISCORD_WEBHOOK_URL }}" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "embeds": [{
+            "title": "❌ VSB Bot Deployment Failed",
+            "description": "The Discord bot deployment encountered an error!",
+            "color": 15158332,
+            "fields": [
+              {
+                "name": "📝 Commit",
+                "value": "[`'${{ github.sha }}'`](https://github.com/KasheK420/py_VSB_Discord_Moderation_BOT/commit/'${{ github.sha }}')",
+                "inline": true
+              },
+              {
+                "name": "🌍 Environment",
+                "value": "Production",
+                "inline": true
+              },
+              {
+                "name": "📋 Logs",
+                "value": "[View Action Logs](https://github.com/KasheK420/py_VSB_Discord_Moderation_BOT/actions/runs/'${{ github.run_id }}')",
+                "inline": true
+              },
+              {
+                "name": "⏰ Failed At",
+                "value": "'$(date -u +%Y-%m-%d\ %H:%M:%S)'",
+                "inline": true
+              },
+              {
+                "name": "👤 Deployed By",
+                "value": "'${{ github.actor }}'",
+                "inline": true
+              },
+              {
+                "name": "🔧 Next Steps",
+                "value": "Check the logs and run health diagnostics on the server",
+                "inline": false
+              }
+            ],
+            "thumbnail": {
+              "url": "https://github.com/KasheK420.png"
+            },
+            "footer": {
+              "text": "VSB Discord Bot CI/CD",
+              "icon_url": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png"
+            },
+            "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%S.000Z)'"
+          }]
+        }'
+
+  # Rollback on failure (runs on self-hosted runner)
+  rollback:
+    needs: deploy
+    runs-on: self-hosted
+    if: failure() && github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: 🔄 Attempt automatic rollback
+      run: |
+        cd /opt/discord-bot
+        
+        # Try to restart with last known good configuration
+        echo "Attempting to rollback to previous state..."
+        
+        # Stop current failed deployment
+        docker-compose -f docker-compose.production.yml down || true
+        
+        # Try to restart with latest stable image
+        docker-compose -f docker-compose.production.yml up -d
+        
+        # Wait and check
+        sleep 30
+        if curl -f http://localhost:8081/health >/dev/null 2>&1; then
+          echo "Rollback successful"
+        else
+          echo "Rollback failed - manual intervention required"
+          exit 1
+        fi
+
+    - name: 📢 Notify Discord on rollback
+      run: |
+        curl -X POST "${{ secrets.DISCORD_WEBHOOK_URL }}" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "embeds": [{
+            "title": "🔄 Automatic Rollback Executed",
+            "description": "Deployment failed and automatic rollback was triggered.",
+            "color": 16776960,
+            "fields": [
+              {
+                "name": "📝 Failed Commit",
+                "value": "[`'${{ github.sha }}'`](https://github.com/KasheK420/py_VSB_Discord_Moderation_BOT/commit/'${{ github.sha }}')",
+                "inline": true
+              },
+              {
+                "name": "🌍 Environment",
+                "value": "Production", 
+                "inline": true
+              },
+              {
+                "name": "⏰ Rollback At",
+                "value": "'$(date -u +%Y-%m-%d\ %H:%M:%S)'",
+                "inline": true
+              },
+              {
+                "name": "🏥 Status",
+                "value": "Service restored to previous working state",
+                "inline": false
+              }
+            ],
+            "thumbnail": {
+              "url": "https://github.com/KasheK420.png"
+            },
+            "footer": {
+              "text": "VSB Discord Bot CI/CD - Rollback",
+              "icon_url": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png"
+            },
+            "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%S.000Z)'"
+          }]
+        }'

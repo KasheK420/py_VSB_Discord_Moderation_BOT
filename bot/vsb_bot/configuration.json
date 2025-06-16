@@ -21,6 +21,10 @@
       "robot": "Beep boop, cringe bot activated. 🤖",
       "troll": "U mad, bro?👹"
     },
+    "jail_service": {
+      "enabled": true,
+      "max_duration_days": 30
+    },
     "reaction_service_gif": {
       "dog": "gif_response",
       "black man": "gif_response",
