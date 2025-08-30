@@ -1,0 +1,36 @@
+# Dockerfile.dev
+# Development Docker configuration for VSB Discord Bot
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies and development tools
+RUN apt-get update && apt-get install -y \
+    gcc \
+    git \
+    vim \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements
+COPY requirements.txt requirements-dev.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements-dev.txt
+
+# Create non-root user for development
+RUN useradd -m -s /bin/bash devuser && \
+    chown -R devuser:devuser /app
+
+USER devuser
+
+# Copy application (will be overridden by volume mount)
+COPY --chown=devuser:devuser . .
+
+# Development environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV DEVELOPMENT=true
+
+# Default command (can be overridden)
+CMD ["python", "scripts/dev_run.py"]

@@ -1,0 +1,14 @@
+"""
+bot/services/__init__.py
+Services package for VSB Discord Bot
+"""
+
+from .auth_service import AuthService
+from .logging_service import EmbedLogger, LogLevel, LogCategory
+
+__all__ = [
+    'AuthService',
+    'EmbedLogger',
+    'LogLevel',
+    'LogCategory'
+]

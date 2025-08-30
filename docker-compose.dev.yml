@@ -1,0 +1,42 @@
+# docker-compose.dev.yml
+# Development overrides for Docker Compose
+# Use with: docker-compose -f docker-compose.yml -f docker-compose.dev.yml
+
+services:
+  postgres:
+    # Override only the external port for development
+    ports:
+      - "5432:5432"  # Hardcode to avoid conflicts
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./backups:/backups
+
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    # Load ALL environment variables from .env.dev file
+    env_file:
+      - .env.dev
+    # Only override specific dev settings here
+    environment:
+      # Development-specific overrides only
+      DEBUG: "true"
+      LOG_LEVEL: "DEBUG"
+      # Critical: ensure DB_HOST points to postgres service (not from env file)
+      DB_HOST: postgres
+      # IMPORTANT: Internal port is ALWAYS 5432 inside Docker network!
+      DB_PORT: "5432"  # Must override the 5433 from .env.dev!
+    ports:
+      - "8080:80"  # Hardcode dev port
+    volumes:
+      - ./bot:/app/bot
+      - ./webserver.py:/app/webserver.py
+      - ./scripts:/app/scripts
+      - ./alembic.ini:/app/alembic.ini
+      - ./logs:/app/logs
+      - ./data:/app/data
+    command: python scripts/dev_run.py
+
+volumes:
+  postgres_dev_data:

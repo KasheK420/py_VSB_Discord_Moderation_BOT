@@ -1,0 +1,82 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: vsb_bot  # This creates the database!
+      POSTGRES_USER: vsb_bot
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  bot:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Discord Configuration
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID}
+      COMMAND_PREFIX: ${COMMAND_PREFIX}
+      
+      # OAuth Configuration
+      OAUTH_CLIENT_ID: ${OAUTH_CLIENT_ID}
+      OAUTH_CLIENT_SECRET: ${OAUTH_CLIENT_SECRET}
+      
+      # Database Configuration
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: 5432  # Internal postgres port (always 5432 inside container)
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      
+      # Role IDs
+      STUDENT_ROLE_ID: ${STUDENT_ROLE_ID}
+      ERASMUS_ROLE_ID: ${ERASMUS_ROLE_ID}
+      TEACHER_ROLE_ID: ${TEACHER_ROLE_ID}
+      ADMIN_HELP_ROLE_ID: ${ADMIN_HELP_ROLE_ID}
+      DEVELOPER_ROLE_ID: ${DEVELOPER_ROLE_ID}
+      HOST_ROLE_ID: ${HOST_ROLE_ID}
+      ABSOLVENT_ROLE_ID: ${ABSOLVENT_ROLE_ID}
+      ADMIN_ROLE_ID: ${ADMIN_ROLE_ID}
+      CLASSES_ROLE_IDS: ${CLASSES_ROLE_IDS}
+      
+      # Channel IDs
+      BOT_CHANNEL_ID: ${BOT_CHANNEL_ID}
+      WELCOME_CHANNEL_ID: ${WELCOME_CHANNEL_ID}
+      TEACHERS_ACCOUNTS_CHANNEL_ID: ${TEACHERS_ACCOUNTS_CHANNEL_ID}
+      GIVEAWAY_CHANNEL_ID: ${GIVEAWAY_CHANNEL_ID}
+      VSB_NEWS_CHANNEL_ID: ${VSB_NEWS_CHANNEL_ID}
+      ADMIN_LOG_CHANNEL_ID: ${ADMIN_LOG_CHANNEL_ID}
+      
+      # Miscellaneous Configuration
+      LEGACY_PREFIXES: ${LEGACY_PREFIXES}
+      TESTER_IDS: ${TESTER_IDS}
+      MESSENGER_DELETE_AFTER: ${MESSENGER_DELETE_AFTER}
+      CHANNEL_CLEAN_DELETE_AFTER: ${CHANNEL_CLEAN_DELETE_AFTER}
+      VERIFICATION_TEACHER_URL_PREFIX: ${VERIFICATION_TEACHER_URL_PREFIX}
+      
+      # Feature Flags
+      APP_STUDENT_VERIFICATION_ENABLED: ${APP_STUDENT_VERIFICATION_ENABLED}
+      APP_STUDENT_SCRAPER_ENABLED: ${APP_STUDENT_SCRAPER_ENABLED}
+      
+      # Email Configuration (if needed)
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+    ports:
+      - "${BOT_PORT:-80}:80"
+    restart: unless-stopped
+    volumes:
+      - ./logs:/app/logs
+
+volumes:
+  postgres_data:

@@ -1,2 +1,0 @@
-include pyproject.toml
-include vsb_bot/configuration.json

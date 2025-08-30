@@ -1,0 +1,343 @@
+{
+  "version": "1.2.0",
+  "updated_at": "2025-08-27T00:00:00Z",
+  "enabled": true,
+  "server_type": "university",
+  "timezone": "Europe/Warsaw",
+
+  "limits": {
+    "daily_ai_limit": 500,
+    "min_message_length": 15,
+    "max_message_length": 1000,
+    "max_lines_per_message": 12,
+    "max_messages_per_10s": 7,
+    "max_mentions_per_message": 5,
+    "max_role_mentions_per_message": 2,
+    "max_channel_mentions_per_message": 3,
+    "max_emojis_per_message": 20,
+    "max_reactions_per_min": 25,
+    "capslock_ratio_warn": 0.7,
+    "duplicate_message_window_sec": 45,
+    "duplicate_message_threshold": 3,
+    "zalgo_threshold": 6,
+    "unicode_confusables_threshold": 4,
+    "spoiler_max_ratio": 0.5,
+    "attachments_max_per_message": 5,
+    "attachments_max_total_mb": 50
+  },
+
+  "warning_threshold": 3,
+
+  "logging": {
+    "modlog_channel_id": 0,
+    "incidents_channel_id": 0,
+    "automod_alerts_channel_id": 0,
+    "webhook_url": "",
+    "include_message_snippets": true,
+    "redact_links_in_logs": true,
+    "store_user_history_days": 90
+  },
+
+  "whitelisted_channels": [
+    1332463141929615390,
+    1382817949416423484
+  ],
+  "whitelisted_roles": [
+    "admin",
+    "mod",
+    "regular",
+    "veteran",
+    "moderator",
+    "admin",
+    "teacher"
+  ],
+  "blacklisted_channels": [],
+  "blacklisted_roles": [],
+  "exemptions": {
+    "channels_no_link_filter": [],
+    "channels_no_caps_filter": [],
+    "roles_no_automod": ["admin", "moderator", "teacher"]
+  },
+
+  "trusted_user_criteria": {
+    "premium_members": true,
+    "account_age_days": 30,
+    "server_join_age_hours": 24,
+    "no_warnings_required": true,
+    "warns_max_for_trust": 0,
+    "trusted_role_names": ["vip", "supporter", "regular", "veteran", "staff"],
+    "must_have_phone_verified": false
+  },
+
+  "anti_raid": {
+    "enabled": true,
+    "burst_join_threshold": 8,
+    "burst_window_seconds": 30,
+    "auto_slowmode_seconds": 10,
+    "new_account_min_age_hours": 12,
+    "require_captcha_for_newcomers": false,
+    "lockdown_on_mass_mention": {
+      "enabled": true,
+      "mention_threshold": 15,
+      "window_seconds": 20,
+      "lockdown_minutes": 10
+    }
+  },
+
+  "link_policy": {
+    "allow_invites_in_channels": [],
+    "block_all_invites": true,
+    "allow_domains": [
+      "discord.com",
+      "discordapp.com",
+      "github.com",
+      "docs.google.com",
+      "google.com",
+      "microsoft.com",
+      "edu.cz",
+      "vsb.cz",
+      "polsl.pl",
+      "wikipedia.org",
+      "arxiv.org",
+      "openaccess.thecvf.com",
+      "elsevier.com"
+    ],
+    "block_domains": [
+      "grabify.link",
+      "iplogger.org",
+      "blasze.com",
+      "free-nitro.*",
+      "nitro-gift.*",
+      "steamcommumity.*",
+      "discorcl.*",
+      "dlscord.*",
+      "onlyfansleaks.*"
+    ],
+    "block_url_shorteners": true,
+    "shortener_domains": [
+      "bit.ly", "cutt.ly", "tinyurl.com", "goo.gl", "t.co", "ow.ly", "linktr.ee", "is.gd", "s.id"
+    ],
+    "block_suspicious_tlds": [
+      "zip", "mov", "country", "click", "work", "xyz", "top", "gq", "tk", "ml"
+    ],
+    "strip_utm_params": true,
+    "max_links_per_message": 4
+  },
+
+  "attachment_policy": {
+    "allow_images": true,
+    "allow_archives": true,
+    "allow_executables": false,
+    "forbidden_extensions": [
+      ".exe", ".msi", ".bat", ".cmd", ".scr", ".ps1", ".vbs", ".js", ".jar", ".apk"
+    ],
+    "scan_archives": true,
+    "max_archive_depth": 2,
+    "image_nsfw_scan": true,
+    "image_spoiler_required_in_general": true
+  },
+
+  "format_detectors": {
+    "invite_regex": "(?:discord(?:\\.gg|\\.com/invite)/[A-Za-z0-9-]{2,})",
+    "url_regex": "(https?://[\\w.-]+(?:\\.[\\w.-]+)+[/\\w\\-._~:?#[\\]@!$&'()*+,;=%]*)",
+    "email_regex": "(?:[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\\.[a-zA-Z0-9-.]+)",
+    "phone_regex": "(?:\\+?\\d[\\d\\s().-]{7,}\\d)",
+    "ip_regex": "\\b(?:(?:2(?:5[0-5]|[0-4]\\d)|1?\\d?\\d)\\.){3}(?:2(?:5[0-5]|[0-4]\\d)|1?\\d?\\d)\\b",
+    "bitcoin_regex": "\\b[13][a-km-zA-HJ-NP-Z1-9]{25,34}\\b",
+    "eth_regex": "\\b0x[a-fA-F0-9]{40}\\b",
+    "zalgo_regex": "[\\u0300-\\u036F\\u0483-\\u0489\\u20D0-\\u20FF]{3,}",
+    "unicode_confusables": true
+  },
+
+  "bad_words": {
+    "hate_speech": [
+      "n[\\W_]*i[\\W_]*g{1,2}[\\W_]*e?[\\W_]*r",
+      "(?<![a-z])n[\\W_]*i[\\W_]*g{1,2}[\\W_]*g[\\W_]*a(?![a-z])",
+      "(?<![a-z])n[\\W_]*e[\\W_]*g[\\W_]*e?[\\W_]*r(?![a-z])", 
+      "(?<![a-z])n[\\W_]*e[\\W_]*g[\\W_]*r[\\W_]*o(?![a-z])",
+      "f[\\W_]*a[\\W_]*g{1,2}[\\W_]*(ot)?",
+      "k[\\W_]*i?[\\W_]*k[\\W_]*e",
+      "c[\\W_]*h[\\W_]*i[\\W_]*n[\\W_]*k",
+      "r[\\W_]*e[\\W_]*t[\\W_]*a[\\W_]*r[\\W_]*d",
+      "t[\\W_]*r[\\W_]*a[\\W_]*n[\\W_]*n?[\\W_]*y",
+      "s[\\W_]*p[\\W_]*i[\\W_]*c",
+      "p[\\W_]*a[\\W_]*k[\\W_]*i",
+      "g[\\W_]*y[\\W_]*p[\\W_]*s[\\W_]*y"
+    ],
+    "toxic": [
+      "\\bkys\\b",
+      "\\bkill\\s*yourself\\b",
+      "\\bdie\\s*in\\b",
+      "\\bgo\\s*kill\\b",
+      "\\bsuicide\\b",
+      "\\bneck\\s*yourself\\b",
+      "\\bdrink\\s*bleach\\b"
+    ],
+    "harassment": [
+      "\\bdoxx?\\b",
+      "\\bswat\\b",
+      "\\bleak\\b",
+      "\\bexpose\\b",
+      "\\bwitch\\s*hunt\\b",
+      "\\bbrigad(e|ing)\\b"
+    ],
+    "adult_content": [
+      "\\bporn\\b",
+      "\\bxxx\\b",
+      "\\bnudes?\\b",
+      "\\bonly\\s*fans?\\b",
+      "\\b18\\+\\b",
+      "\\bnsfw\\b",
+      "\\bdeepfake\\b"
+    ],
+    "spam_indicators": [
+      "discord\\.gg/",
+      "\\bfree\\s+nitro\\b",
+      "\\bclick\\s*here\\b",
+      "\\bdm\\s*me\\s*for\\b",
+      "\\bcheck\\s*my\\s*profile\\b",
+      "\\bboost\\s*server\\b",
+      "\\bcrypto\\s+giveaway\\b",
+      "\\bairdrop\\b",
+      "\\bverify\\s*here\\b"
+    ],
+    "scams_fraud": [
+      "\\bsteam\\s*gift\\b",
+      "\\bepic\\s*(games)?\\s*giveaway\\b",
+      "\\bmetamask\\s*support\\b",
+      "\\bwallet\\s*recovery\\b",
+      "\\bcredential\\s*reset\\b",
+      "\\baccount\\s*suspension\\b",
+      "\\bappeal\\s*form\\b"
+    ],
+    "academics_misconduct": [
+      "\\bwrite\\s*my\\s*essay\\b",
+      "\\bdo\\s*my\\s*homework\\b",
+      "\\bexam\\s*answers\\b",
+      "\\btest\\s*keys?\\b",
+      "\\bchegg\\s*unlock\\b",
+      "\\bplagiarism\\b",
+      "\\bai\\s*write\\s*for\\s*me\\b"
+    ],
+    "personal_data_disclosure": [
+      "\\baddress\\s*is\\b",
+      "\\bhome\\s*address\\b",
+      "\\bphone\\s*number\\b",
+      "\\bcredit\\s*card\\b",
+      "\\bcard\\s*number\\b",
+      "\\bssn\\b",
+      "\\bnational\\s*id\\b"
+    ],
+    "drug_illegal": [
+      "\\bopioids?\\b",
+      "\\bcocaine\\b",
+      "\\bmeth\\b",
+      "\\bmdma\\b",
+      "\\bxtc\\b",
+      "\\bshrooms?\\b"
+    ],
+    "weapons_violence": [
+      "\\bbomb\\s*threat\\b",
+      "\\bschool\\s*shoot\\w*\\b",
+      "\\bbring\\s*a\\s*gun\\b",
+      "\\bstab\\b"
+    ],
+    "lang_cz": [
+      "\\bdebil\\b",
+      "\\bk*rva\\b",
+      "\\bzmrd\\b",
+      "\\bchcípni\\b",
+      "\\bč*rák\\b"
+    ],
+    "lang_pl": [
+      "\\bdebil\\b",
+      "\\bkuj\\b",
+      "\\bspier\\*?dalaj\\b",
+      "\\bch*j\\b",
+      "\\bzdychaj\\b"
+    ]
+  },
+
+  "hard_terms": {
+    "hate_slurs": ["nigger","nigga","negr","neger","negro"]
+  },
+
+  "suspicion_weights": {
+    "bad_word": 10,
+    "excessive_caps": 5,
+    "repetitive_content": 7,
+    "mention_spam": 8,
+    "suspicious_link": 6,
+    "emoji_spam": 4,
+    "invite_link": 7,
+    "shortener_link": 6,
+    "forbidden_attachment": 10,
+    "personal_data_leak": 10,
+    "mass_spoiler": 3,
+    "zalgo_text": 3,
+    "unicode_confusables": 4,
+    "scam_phrase": 8,
+    "academic_misconduct": 6
+  },
+
+  "severity_mapping": {
+    "low": ["excessive_caps", "emoji_spam", "mass_spoiler", "zalgo_text"],
+    "medium": ["repetitive_content", "mention_spam", "suspicious_link", "invite_link", "shortener_link", "academic_misconduct"],
+    "high": ["bad_word", "forbidden_attachment", "personal_data_leak", "scam_phrase", "weapons_violence"]
+  },
+
+  "escalation_rules": {
+    "light_action": {
+      "max_warnings": 1,
+      "max_severity": "low",
+      "action": "dm_warning"
+    },
+    "medium_action": {
+      "max_warnings": 2,
+      "max_severity": "medium",
+      "action": "timeout_10min"
+    },
+    "severe_action": {
+      "min_warnings": 3,
+      "min_severity": "high",
+      "action": "timeout_1hour_or_kick"
+    },
+    "extreme_action": {
+      "conditions": {
+        "weapons_violence": true,
+        "mass_raid_detected": true,
+        "personal_data_leak": true
+      },
+      "action": "ban_and_report"
+    }
+  },
+
+  "actions": {
+    "dm_warning_template": "Hey {user}, your message in {channel} broke our server rules ({reason}). Please keep it civil.",
+    "public_warning_template": "{user}, please follow the rules. Reason: {reason}",
+    "delete_message": true,
+    "timeout_durations": {
+      "low": 300,
+      "medium": 600,
+      "high": 3600
+    },
+    "kick_after_warnings": 5,
+    "ban_after_kicks": 2,
+    "notify_staff_on_actions": true
+  },
+
+  "review_queues": {
+    "enabled": true,
+    "nsfw_queue": true,
+    "scam_queue": true,
+    "academic_queue": true,
+    "manual_review_required_threshold": 12
+  },
+
+  "responses": {
+    "self_promo": "Self-promotion is limited. Please use the designated channels.",
+    "invite_blocked": "Invite links are not allowed here.",
+    "suspicious_link": "Your link looks unsafe and was removed.",
+    "academic_misconduct": "Requests for cheating or selling answers are not allowed."
+  }
+}
