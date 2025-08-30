@@ -18,3 +18,6 @@ __all__ = [
     "HOFQueries",
     "ShameQueries",
 ]
+
+
+# Note: KBQueries is currently not used anywhere in the bot.

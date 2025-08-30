@@ -68,3 +68,21 @@ jobs:
           tags: ${{ steps.image.outputs.tags }}
           cache-from: type=registry,ref=${{ steps.image.outputs.cache_ref }}
           cache-to: type=registry,ref=${{ steps.image.outputs.cache_ref }},mode=max
+
+      # 🔔 Trigger Portainer redeploy after a successful push
+      - name: Trigger Portainer webhook (redeploy)
+        if: ${{ success() }}
+        env:
+          PORTAINER_WEBHOOK_URL: ${{ secrets.PORTAINER_WEBHOOK_URL }}
+        run: |
+          echo "Calling Portainer webhook..."
+          for i in 1 2 3; do
+            if curl -fsS -X POST "$PORTAINER_WEBHOOK_URL"; then
+              echo "Webhook triggered."
+              exit 0
+            fi
+            echo "Webhook attempt $i failed; retrying in 3s..."
+            sleep 3
+          done
+          echo "Failed to trigger Portainer webhook after 3 attempts." >&2
+          exit 1
