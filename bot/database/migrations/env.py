@@ -3,15 +3,14 @@ bot/database/migrations/env.py
 Alembic environment configuration for PostgreSQL
 """
 
-import os
-from logging.config import fileConfig
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
-from alembic import context
-
 # Import models for autogenerate
 import sys
+from logging.config import fileConfig
 from pathlib import Path
+
+from alembic import context
+from sqlalchemy import engine_from_config, pool
+
 sys.path.append(str(Path(__file__).parent.parent.parent.parent))
 
 from bot.database.models.sqlalchemy_models import Base

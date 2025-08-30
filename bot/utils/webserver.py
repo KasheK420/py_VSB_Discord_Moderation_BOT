@@ -4,38 +4,38 @@ CAS callback web server for VSB Discord Bot with comprehensive logging
 Handles CAS callbacks with beautiful success page
 """
 
-from aiohttp import web
-import aiohttp
 import asyncio
 import logging
-from typing import Optional
-from pathlib import Path
+
+from aiohttp import web
+
 from ..services.logging_service import LogLevel
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 class OAuthWebServer:
-    def __init__(self, auth_service, host='0.0.0.0', port=80):
+    def __init__(self, auth_service, host="0.0.0.0", port=80):
         self.auth_service = auth_service
         self.host = host
         self.port = port
         self.app = web.Application()
         self.request_count = 0
         self.setup_routes()
-        
+
     def setup_routes(self):
         """Setup web server routes"""
-        self.app.router.add_get('/', self.handle_root)
-        self.app.router.add_get('/callback', self.handle_callback)
-        self.app.router.add_get('/health', self.handle_health)
-        
+        self.app.router.add_get("/", self.handle_root)
+        self.app.router.add_get("/callback", self.handle_callback)
+        self.app.router.add_get("/health", self.handle_health)
+
     async def handle_root(self, request: web.Request) -> web.Response:
         """Root endpoint - redirects to CAS if Discord ID provided"""
         self.request_count += 1
-        discord_id = request.query.get('_')
+        discord_id = request.query.get("_")
         client_ip = request.remote
-        
+
         # Log root access
         if self.auth_service.embed_logger:
             await self.auth_service.embed_logger.log_custom(
@@ -48,10 +48,10 @@ class OAuthWebServer:
                     "Client IP": client_ip,
                     "Discord ID": discord_id if discord_id else "Missing",
                     "Request Count": str(self.request_count),
-                    "User Agent": request.headers.get('User-Agent', 'Unknown')[:100]
-                }
+                    "User Agent": request.headers.get("User-Agent", "Unknown")[:100],
+                },
             )
-        
+
         if not discord_id:
             if self.auth_service.embed_logger:
                 await self.auth_service.embed_logger.log_custom(
@@ -62,32 +62,30 @@ class OAuthWebServer:
                     fields={
                         "Client IP": client_ip,
                         "Request Count": str(self.request_count),
-                        "Error": "Missing Discord ID parameter (_)"
-                    }
+                        "Error": "Missing Discord ID parameter (_)",
+                    },
                 )
-            
+
             return web.Response(
                 text="Missing Discord ID parameter",
                 status=400,
-                headers={'Content-Type': 'text/plain'}
+                headers={"Content-Type": "text/plain"},
             )
-        
+
         # Generate state for OAuth flow
         state = f"discord_{discord_id}"
         self.auth_service.pending_auths[state] = {
-            'discord_id': discord_id,
-            'timestamp': asyncio.get_event_loop().time()
+            "discord_id": discord_id,
+            "timestamp": asyncio.get_event_loop().time(),
         }
-        
+
         # Build CAS login URL
-        cas_params = {
-            'service': self.auth_service.service_url,
-            'state': state
-        }
-        
+        cas_params = {"service": self.auth_service.service_url, "state": state}
+
         import urllib.parse
+
         cas_login_url = f"{self.auth_service.cas_login_url}?" + urllib.parse.urlencode(cas_params)
-        
+
         # Log redirect
         if self.auth_service.embed_logger:
             await self.auth_service.embed_logger.log_custom(
@@ -99,23 +97,20 @@ class OAuthWebServer:
                     "Discord ID": discord_id,
                     "State": state,
                     "CAS URL": self.auth_service.cas_login_url,
-                    "Service URL": self.auth_service.service_url
-                }
+                    "Service URL": self.auth_service.service_url,
+                },
             )
-        
+
         # Redirect to CAS
-        return web.Response(
-            status=302,
-            headers={'Location': cas_login_url}
-        )
-        
+        return web.Response(status=302, headers={"Location": cas_login_url})
+
     async def handle_callback(self, request: web.Request) -> web.Response:
         """Handle CAS callback"""
         self.request_count += 1
-        ticket = request.query.get('ticket')
-        state = request.query.get('state', request.query.get('_'))
+        ticket = request.query.get("ticket")
+        state = request.query.get("state", request.query.get("_"))
         client_ip = request.remote
-        
+
         # Log callback attempt
         if self.auth_service.embed_logger:
             await self.auth_service.embed_logger.log_custom(
@@ -128,10 +123,10 @@ class OAuthWebServer:
                     "Client IP": client_ip,
                     "Has Ticket": "Yes" if ticket else "No",
                     "State": state if state else "Missing",
-                    "Request Count": str(self.request_count)
-                }
+                    "Request Count": str(self.request_count),
+                },
             )
-        
+
         if not ticket:
             if self.auth_service.embed_logger:
                 await self.auth_service.embed_logger.log_custom(
@@ -142,17 +137,17 @@ class OAuthWebServer:
                     fields={
                         "Client IP": client_ip,
                         "State": state if state else "None",
-                        "Error": "Missing CAS ticket parameter"
-                    }
+                        "Error": "Missing CAS ticket parameter",
+                    },
                 )
-            
+
             return web.Response(
                 text="Authentication failed: Missing ticket",
                 status=400,
-                headers={'Content-Type': 'text/plain'}
+                headers={"Content-Type": "text/plain"},
             )
-        
-        if not state or not state.startswith('discord_'):
+
+        if not state or not state.startswith("discord_"):
             if self.auth_service.embed_logger:
                 await self.auth_service.embed_logger.log_custom(
                     service="Web Server",
@@ -163,65 +158,65 @@ class OAuthWebServer:
                         "Client IP": client_ip,
                         "State": state if state else "None",
                         "Ticket": "Present" if ticket else "Missing",
-                        "Error": "Invalid or missing state parameter"
-                    }
+                        "Error": "Invalid or missing state parameter",
+                    },
                 )
-            
+
             return web.Response(
                 text="Authentication failed: Invalid state",
                 status=400,
-                headers={'Content-Type': 'text/plain'}
+                headers={"Content-Type": "text/plain"},
             )
-        
+
         # Process the authentication
         try:
             result = await self.auth_service.process_cas_callback(ticket, state)
-            
-            if result['success']:
+
+            if result["success"]:
                 # Success page
-                html_content = self.generate_success_page(result['user'])
+                html_content = self.generate_success_page(result["user"])
                 return web.Response(
                     text=html_content,
                     status=200,
-                    headers={'Content-Type': 'text/html; charset=utf-8'}
+                    headers={"Content-Type": "text/html; charset=utf-8"},
                 )
             else:
                 # Error page
-                html_content = self.generate_error_page(result.get('error', 'Authentication failed'))
+                html_content = self.generate_error_page(
+                    result.get("error", "Authentication failed")
+                )
                 return web.Response(
                     text=html_content,
                     status=400,
-                    headers={'Content-Type': 'text/html; charset=utf-8'}
+                    headers={"Content-Type": "text/html; charset=utf-8"},
                 )
-                
+
         except Exception as e:
             logger.error(f"Error processing CAS callback: {e}")
-            
+
             if self.auth_service.embed_logger:
                 await self.auth_service.embed_logger.log_error(
                     service="Web Server",
                     error=e,
-                    context=f"Error processing CAS callback for state: {state}"
+                    context=f"Error processing CAS callback for state: {state}",
                 )
-            
+
             html_content = self.generate_error_page("Internal server error during authentication")
             return web.Response(
-                text=html_content,
-                status=500,
-                headers={'Content-Type': 'text/html; charset=utf-8'}
+                text=html_content, status=500, headers={"Content-Type": "text/html; charset=utf-8"}
             )
-        
+
     async def handle_health(self, request: web.Request) -> web.Response:
         """Health check endpoint"""
         self.request_count += 1
-        
+
         uptime_info = {
             "status": "healthy",
             "service": "VSB Discord OAuth Server",
             "requests_served": self.request_count,
-            "auth_service": "connected" if self.auth_service else "disconnected"
+            "auth_service": "connected" if self.auth_service else "disconnected",
         }
-        
+
         # Log health check (but only occasionally to avoid spam)
         if self.request_count % 100 == 0 and self.auth_service.embed_logger:
             await self.auth_service.embed_logger.log_custom(
@@ -233,12 +228,12 @@ class OAuthWebServer:
                     "Status": "✅ Healthy",
                     "Total Requests": str(self.request_count),
                     "Server": f"{self.host}:{self.port}",
-                    "Auth Service": "Connected" if self.auth_service else "Disconnected"
-                }
+                    "Auth Service": "Connected" if self.auth_service else "Disconnected",
+                },
             )
-        
+
         return web.json_response(uptime_info)
-        
+
     async def start(self):
         """Start the web server"""
         try:
@@ -246,9 +241,9 @@ class OAuthWebServer:
             await runner.setup()
             site = web.TCPSite(runner, self.host, self.port)
             await site.start()
-            
+
             logger.info(f"OAuth web server started on {self.host}:{self.port}")
-            
+
             if self.auth_service.embed_logger:
                 await self.auth_service.embed_logger.log_custom(
                     service="Web Server",
@@ -260,8 +255,8 @@ class OAuthWebServer:
                         "Port": str(self.port),
                         "Endpoints": "/, /callback, /health",
                         "Status": "🟢 Running",
-                        "Auth Service": "Connected" if self.auth_service else "Disconnected"
-                    }
+                        "Auth Service": "Connected" if self.auth_service else "Disconnected",
+                    },
                 )
         except Exception as e:
             logger.error(f"Failed to start web server: {e}")
@@ -269,7 +264,7 @@ class OAuthWebServer:
                 await self.auth_service.embed_logger.log_error(
                     service="Web Server",
                     error=e,
-                    context=f"Failed to start web server on {self.host}:{self.port}"
+                    context=f"Failed to start web server on {self.host}:{self.port}",
                 )
             raise
 
@@ -285,8 +280,8 @@ class OAuthWebServer:
                     "Total Requests Served": str(self.request_count),
                     "Host": self.host,
                     "Port": str(self.port),
-                    "Status": "🔴 Shutting down"
-                }
+                    "Status": "🔴 Shutting down",
+                },
             )
         logger.info(f"OAuth web server on {self.host}:{self.port} shutting down")
 

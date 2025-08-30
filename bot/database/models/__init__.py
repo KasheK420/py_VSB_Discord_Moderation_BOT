@@ -2,15 +2,22 @@
 bot/database/models/__init__.py
 Database models package
 """
-from .user import User
-from .poll import Poll
-from .kb import KBArticle, KBAutoReply, KBFeedback
-from .economy import XPStats, XPEvent
+
+from .economy import XPEvent, XPStats
 from .hof import FamePost
+from .kb import KBArticle, KBAutoReply, KBFeedback
+from .poll import Poll
 from .shame import ShameStats
+from .user import User
 
 __all__ = [
-    'User', 'Poll',
-    'KBArticle','KBAutoReply','KBFeedback',
-    'XPStats','XPEvent','FamePost','ShameStats'
+    "User",
+    "Poll",
+    "KBArticle",
+    "KBAutoReply",
+    "KBFeedback",
+    "XPStats",
+    "XPEvent",
+    "FamePost",
+    "ShameStats",
 ]

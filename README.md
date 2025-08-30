@@ -7,7 +7,11 @@
 ![Alembic](https://img.shields.io/badge/Alembic-1.13%2B-FFA116?style=flat-square)
 ![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)
 
-[![Build & Push Docker Image](https://github.com/KasheK420/py_VSB_Discord_Moderation_BOT/actions/workflows/docker-build.yml/badge.svg)](https://github.com/KasheK420/py_VSB_Discord_Moderation_BOT/actions/workflows/docker-build.yml)
+[![Ruff Lint](https://github.com/KasheK420/py_VSB_Discord_Moderation_BOT/actions/workflows/01-ruff-lint.yml/badge.svg)](https://github.com/KasheK420/py_VSB_Discord_Moderation_BOT/actions/workflows/01-ruff-lint.yml)
+[![Format Check (black + isort)](https://github.com/KasheK420/py_VSB_Discord_Moderation_BOT/actions/workflows/02-format-check.yml/badge.svg)](https://github.com/KasheK420/py_VSB_Discord_Moderation_BOT/actions/workflows/02-format-check.yml)
+[![Mypy Type Check](https://github.com/KasheK420/py_VSB_Discord_Moderation_BOT/actions/workflows/03-mypy.yml/badge.svg)](https://github.com/KasheK420/py_VSB_Discord_Moderation_BOT/actions/workflows/03-mypy.yml)
+[![Build & Push Docker Image](https://github.com/KasheK420/py_VSB_Discord_Moderation_BOT/actions/workflows/04-docker-build.yml/badge.svg)](https://github.com/KasheK420/py_VSB_Discord_Moderation_BOT/actions/workflows/04-docker-build.yml)
+[![Tests & Lint (uv)](https://github.com/KasheK420/py_VSB_Discord_Moderation_BOT/actions/workflows/05-tests-uv.yml/badge.svg)](https://github.com/KasheK420/py_VSB_Discord_Moderation_BOT/actions/workflows/05-tests-uv.yml)
 
 A comprehensive Discord moderation and community management bot for the VSB Discord server, featuring AI integration, advanced moderation tools, economy system, and automated workflows.
 

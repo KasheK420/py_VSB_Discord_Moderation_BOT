@@ -2,15 +2,16 @@
 bot/database/queries/poll_queries.py
 Poll-related database queries for PostgreSQL
 """
+
 import asyncpg
-from typing import Optional, List
+
 from ..models.poll import Poll
-from datetime import datetime
+
 
 class PollQueries:
     def __init__(self, db_pool: asyncpg.Pool):
         self.pool = db_pool
-        
+
     async def create_poll(self, poll: Poll) -> None:
         """Create a new poll"""
         query = """
@@ -28,10 +29,10 @@ class PollQueries:
                 poll.type,
                 poll.title,
                 poll.options,
-                poll.emojis
+                poll.emojis,
             )
-            
-    async def get_poll_by_id(self, poll_id: str) -> Optional[Poll]:
+
+    async def get_poll_by_id(self, poll_id: str) -> Poll | None:
         """Get poll by ID"""
         query = """
             SELECT * FROM polls WHERE id = $1
@@ -39,8 +40,8 @@ class PollQueries:
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(query, poll_id)
             return Poll.from_row(dict(row)) if row else None
-            
-    async def get_active_polls(self) -> List[Poll]:
+
+    async def get_active_polls(self) -> list[Poll]:
         """Get all active polls"""
         query = """
             SELECT * FROM polls 

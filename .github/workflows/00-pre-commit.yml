@@ -1,0 +1,32 @@
+name: Pre-commit (policy & formatting)
+
+on:
+  push:
+    branches: [ main, master, dev, develop, stage* ]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Poetry
+        run: pipx install poetry==1.8.3
+
+      - name: Install pre-commit
+        run: pipx install pre-commit
+
+      - name: Install deps (fast, no-build)
+        run: poetry install --no-root --only dev
+
+      - name: Run pre-commit on all files
+        run: pre-commit run --all-files

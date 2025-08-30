@@ -2,10 +2,9 @@
 
 import os
 from dataclasses import dataclass, field
-from typing import List
 
 
-def _split_csv(name: str, default: str = "") -> List[str]:
+def _split_csv(name: str, default: str = "") -> list[str]:
     raw = os.getenv(name, default)
     parts = [p.strip() for p in raw.split(",") if p.strip()]
     return parts
@@ -29,7 +28,9 @@ class Config:
     oauth_client_id: str = os.getenv("OAUTH_CLIENT_ID", "")
     oauth_client_secret: str = os.getenv("OAUTH_CLIENT_SECRET", "")
     # Optional custom endpoints (fallback to AuthService defaults if empty)
-    oauth_base_url: str = os.getenv("OAUTH_BASE_URL", "")          # e.g., https://vsb-discord-bot.marekhanus.cz
+    oauth_base_url: str = os.getenv(
+        "OAUTH_BASE_URL", ""
+    )  # e.g., https://vsb-discord-bot.marekhanus.cz
     oauth_authorize_url: str = os.getenv("OAUTH_AUTHORIZE_URL", "")
     oauth_token_url: str = os.getenv("OAUTH_TOKEN_URL", "")
     oauth_userinfo_url: str = os.getenv("OAUTH_USERINFO_URL", "")
@@ -50,7 +51,9 @@ class Config:
     developer_role_id: int = int(os.getenv("DEVELOPER_ROLE_ID", "692150310231212092"))
     host_role_id: int = int(os.getenv("HOST_ROLE_ID", "690325052658548756"))
     absolvent_role_id: int = int(os.getenv("ABSOLVENT_ROLE_ID", "690325135542190091"))
-    classes_role_ids: List[int] = field(default_factory=lambda: [int(x) for x in _split_csv("CLASSES_ROLE_IDS")])
+    classes_role_ids: list[int] = field(
+        default_factory=lambda: [int(x) for x in _split_csv("CLASSES_ROLE_IDS")]
+    )
 
     # Channels
     welcome_channel_id: int = int(os.getenv("WELCOME_CHANNEL_ID", "691407527253901312"))
@@ -67,8 +70,10 @@ class Config:
     help_center_forum_channel_id: int = int(os.getenv("HELP_CENTER_FORUM_CHANNEL_ID", "0") or "0")
 
     # Feature flags / toggles
-    legacy_prefixes: List[str] = field(default_factory=lambda: _split_csv("LEGACY_PREFIXES"))
-    tester_ids: List[int] = field(default_factory=lambda: [int(x) for x in _split_csv("TESTER_IDS")])
+    legacy_prefixes: list[str] = field(default_factory=lambda: _split_csv("LEGACY_PREFIXES"))
+    tester_ids: list[int] = field(
+        default_factory=lambda: [int(x) for x in _split_csv("TESTER_IDS")]
+    )
     messenger_delete_after: int = int(os.getenv("MESSENGER_DELETE_AFTER", "10"))
     channel_clean_delete_after: int = int(os.getenv("CHANNEL_CLEAN_DELETE_AFTER", "120"))
     verification_teacher_url_prefix: str = os.getenv("VERIFICATION_TEACHER_URL_PREFIX", "")
@@ -80,7 +85,9 @@ class Config:
     # AI Configuration (Groq API)
     groq_api_key: str = os.getenv("GROQ_API_KEY", "")
     # Default language for user-facing bot messages (set to Czech as requested)
-    default_language: str = os.getenv("DEFAULT_LANGUAGE", "cs")    # 'cs' | 'auto' | 'pl' | 'sk' | 'en'
+    default_language: str = os.getenv(
+        "DEFAULT_LANGUAGE", "cs"
+    )  # 'cs' | 'auto' | 'pl' | 'sk' | 'en'
     language_fallback: str = os.getenv("LANGUAGE_FALLBACK", "en")  # fallback if detection fails
 
     # NEW: AI mention reply + personas toggles
@@ -112,7 +119,7 @@ class Config:
     xp_per_reaction_received: int = int(os.getenv("XP_PER_REACTION_RECEIVED", "2") or "2")
     points_per_reaction_received: int = int(os.getenv("POINTS_PER_REACTION_RECEIVED", "1") or "1")
     xp_daily_cap: int = int(os.getenv("XP_DAILY_CAP", "500") or "500")
-    
+
     # Gambling & Shop
     gambling_channel_id: int = int(os.getenv("GAMBLING_CHANNEL_ID", "0") or "0")
     slots_min_bet_per_line: int = int(os.getenv("SLOTS_MIN_BET_PER_LINE", "1") or "1")
@@ -123,4 +130,3 @@ class Config:
     lottery_ticket_price: int = int(os.getenv("LOTTERY_TICKET_PRICE", "10") or "10")
     lottery_interval_minutes: int = int(os.getenv("LOTTERY_INTERVAL_MINUTES", "60") or "60")
     lottery_announce_channel_id: int = int(os.getenv("LOTTERY_ANNOUNCE_CHANNEL_ID", "0") or "0")
-

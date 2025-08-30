@@ -1,11 +1,11 @@
 # bot/database/queries/kb_queries.py
 from __future__ import annotations
 
-import asyncpg
-from typing import Any, Dict, List, Optional
-from dataclasses import asdict
+from typing import Any
 
-from ..models.kb import KBArticle, KBAutoReply, KBFeedback
+import asyncpg
+
+from ..models.kb import KBArticle
 
 
 class KBQueries:
@@ -132,10 +132,10 @@ class KBQueries:
         *,
         title: str,
         body: str,
-        url: Optional[str] = None,
-        category: Optional[str] = None,
-        tags: Optional[List[str]] = None,
-        article_id: Optional[int] = None,
+        url: str | None = None,
+        category: str | None = None,
+        tags: list[str] | None = None,
+        article_id: int | None = None,
     ) -> int:
         tags = tags or []
         async with pool.acquire() as conn:
@@ -152,7 +152,12 @@ class KBQueries:
                      WHERE id = $6
                      RETURNING id
                     """,
-                    title, url, category, body, tags, article_id,
+                    title,
+                    url,
+                    category,
+                    body,
+                    tags,
+                    article_id,
                 )
             else:
                 row = await conn.fetchrow(
@@ -161,12 +166,16 @@ class KBQueries:
                     VALUES ($1, $2, $3, $4, $5)
                     RETURNING id
                     """,
-                    title, url, category, body, tags,
+                    title,
+                    url,
+                    category,
+                    body,
+                    tags,
                 )
         return int(row["id"])
 
     @staticmethod
-    async def get_article(pool: asyncpg.Pool, article_id: int) -> Optional[KBArticle]:
+    async def get_article(pool: asyncpg.Pool, article_id: int) -> KBArticle | None:
         async with pool.acquire() as conn:
             r = await conn.fetchrow("SELECT * FROM kb_articles WHERE id = $1", article_id)
         if not r:
@@ -181,10 +190,14 @@ class KBQueries:
         )
 
     @staticmethod
-    async def list_articles(pool: asyncpg.Pool, limit: int = 50, offset: int = 0) -> List[KBArticle]:
+    async def list_articles(
+        pool: asyncpg.Pool, limit: int = 50, offset: int = 0
+    ) -> list[KBArticle]:
         async with pool.acquire() as conn:
             rows = await conn.fetch(
-                "SELECT * FROM kb_articles ORDER BY updated_at DESC LIMIT $1 OFFSET $2", limit, offset
+                "SELECT * FROM kb_articles ORDER BY updated_at DESC LIMIT $1 OFFSET $2",
+                limit,
+                offset,
             )
         return [
             KBArticle(
@@ -214,7 +227,7 @@ class KBQueries:
         limit: int = 5,
         min_rank: float = 0.02,
         min_trgm: float = 0.15,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         async with pool.acquire() as conn:
             rows = await conn.fetch(
                 """
@@ -238,10 +251,11 @@ class KBQueries:
                                     similarity(immutable_unaccent(a.body), q.uq)) * 0.3) DESC
                 LIMIT $2
                 """,
-                query, limit,
+                query,
+                limit,
             )
 
-        out: List[Dict[str, Any]] = []
+        out: list[dict[str, Any]] = []
         for r in rows:
             rank = float(r["rank"] or 0.0)
             sim = float(r["sim"] or 0.0)
@@ -263,7 +277,9 @@ class KBQueries:
     # ---------- auto-replies & feedback ----------
 
     @staticmethod
-    async def mark_replied(pool: asyncpg.Pool, thread_id: int, post_message_id: int, kb_ids: List[int]) -> None:
+    async def mark_replied(
+        pool: asyncpg.Pool, thread_id: int, post_message_id: int, kb_ids: list[int]
+    ) -> None:
         async with pool.acquire() as conn:
             await conn.execute(
                 """
@@ -272,17 +288,23 @@ class KBQueries:
                 ON CONFLICT (thread_id) DO UPDATE
                 SET kb_ids = excluded.kb_ids, updated_at = NOW()
                 """,
-                thread_id, post_message_id, kb_ids,
+                thread_id,
+                post_message_id,
+                kb_ids,
             )
 
     @staticmethod
     async def was_replied(pool: asyncpg.Pool, thread_id: int) -> bool:
         async with pool.acquire() as conn:
-            row = await conn.fetchrow("SELECT 1 FROM kb_auto_replies WHERE thread_id = $1", thread_id)
+            row = await conn.fetchrow(
+                "SELECT 1 FROM kb_auto_replies WHERE thread_id = $1", thread_id
+            )
         return bool(row)
 
     @staticmethod
-    async def record_feedback(pool: asyncpg.Pool, thread_id: int, helpful: bool, user_id: int) -> None:
+    async def record_feedback(
+        pool: asyncpg.Pool, thread_id: int, helpful: bool, user_id: int
+    ) -> None:
         async with pool.acquire() as conn:
             await conn.execute(
                 """
@@ -291,5 +313,7 @@ class KBQueries:
                 ON CONFLICT (thread_id, user_id) DO UPDATE
                 SET helpful = excluded.helpful, updated_at = NOW()
                 """,
-                thread_id, user_id, helpful,
+                thread_id,
+                user_id,
+                helpful,
             )

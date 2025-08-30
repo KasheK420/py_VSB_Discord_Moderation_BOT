@@ -4,7 +4,6 @@ from __future__ import annotations
 import logging
 import os
 import random
-from typing import Optional, List
 
 import discord
 from discord.ext import commands
@@ -18,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 # -------- Fallback Czech templates (used only if AI call fails) --------
 
+
 def _poem_welcome_fallback(name: str) -> str:
     name = (name or "příteli").strip()
     choices = [
@@ -25,13 +25,13 @@ def _poem_welcome_fallback(name: str) -> str:
             f"{name}, vítej u nás, v tomhle chatu,",
             "ptej se klidně — bez zbytečného patu.",
             "Když zabloudíš, mrkni na připnuté zprávy,",
-            "od toho jsme tu — pomůžem ti hravě."
+            "od toho jsme tu — pomůžem ti hravě.",
         ],
         [
             f"Ahoj {name}! Přisel jsi v pravý čas,",
             "kanály čekají, pojď mezi nás.",
             "Když něco nejde, napiš pár vět,",
-            "společně najdeme správný směr i svět."
+            "společně najdeme správný směr i svět.",
         ],
     ]
     return "\n".join(random.choice(choices))
@@ -39,25 +39,30 @@ def _poem_welcome_fallback(name: str) -> str:
 
 def _poem_farewell_fallback(name: str, reason_label: str) -> str:
     name = (name or "cestovateli").strip()
-    tail = "měj se krásně a ať se daří dál." if reason_label != "zabanován" else "snad příště lépe — tak zas někdy dál."
+    tail = (
+        "měj se krásně a ať se daří dál."
+        if reason_label != "zabanován"
+        else "snad příště lépe — tak zas někdy dál."
+    )
     choices = [
         [
             f"{name} dnes {reason_label} náš digitální sál,",
             "vzpomínky zůstanou, chat nezmizel v dál.",
             "Ať pingy ti přejí, ať net drží dál,",
-            tail
+            tail,
         ],
         [
             f"Tak ahoj {name}, co {reason_label} bez váhání,",
             "naše vlákna šumí, běží povídání.",
             "Kdyby ses vrátil, budem rádi zas,",
-            tail
+            tail,
         ],
     ]
     return "\n".join(random.choice(choices))
 
 
 # --------------------------- Cog ---------------------------
+
 
 class WelcomeCog(commands.Cog):
     """
@@ -71,11 +76,12 @@ class WelcomeCog(commands.Cog):
         self.embed_logger = getattr(bot, "embed_logger", None)
 
         # Public channel to post poems (fallback to welcome channel if general is not set)
-        self.general_channel_id: Optional[int] = getattr(bot.config, "general_channel_id", None) \
-            or getattr(bot.config, "welcome_channel_id", None)
+        self.general_channel_id: int | None = getattr(
+            bot.config, "general_channel_id", None
+        ) or getattr(bot.config, "welcome_channel_id", None)
 
         # Verification channel (for DM instructions)
-        self.verification_channel_id: Optional[int] = getattr(bot.config, "welcome_channel_id", None)
+        self.verification_channel_id: int | None = getattr(bot.config, "welcome_channel_id", None)
 
         # Tenor settings (optional). Default locale -> cs_CZ so retrieved GIFs match language where possible.
         api_key = getattr(bot.config, "tenor_api_key", "") or ""
@@ -88,13 +94,13 @@ class WelcomeCog(commands.Cog):
 
     # ---------- helpers ----------
 
-    def _get_general(self, guild: discord.Guild) -> Optional[discord.TextChannel]:
+    def _get_general(self, guild: discord.Guild) -> discord.TextChannel | None:
         if not self.general_channel_id:
             return None
         ch = guild.get_channel(int(self.general_channel_id))
         return ch if isinstance(ch, discord.TextChannel) else None
 
-    async def _fetch_tenor_gif(self, query: str) -> Optional[str]:
+    async def _fetch_tenor_gif(self, query: str) -> str | None:
         if not self.tenor.is_enabled:
             return None
         try:
@@ -108,7 +114,7 @@ class WelcomeCog(commands.Cog):
         Return a short Czech poem for welcome/farewell. Never returns empty string.
         kind: 'welcome' | 'farewell:odešel' | 'farewell:kick' | 'farewell:ban'
         """
-        from bot.utils.ai_helper import get_ai_service
+
         ai = get_ai_service()
 
         # Prefer a model that your Groq account actually has.
@@ -162,7 +168,7 @@ class WelcomeCog(commands.Cog):
                 await self.embed_logger.log_error(
                     service="Welcome",
                     error=e,
-                    context=f"AI poem generation exception (kind={kind})"
+                    context=f"AI poem generation exception (kind={kind})",
                 )
             text = ""
 
@@ -196,11 +202,10 @@ class WelcomeCog(commands.Cog):
                     "Kind": kind,
                     "Model": model,
                     "Length": f"{len(text)} chars",
-                }
+                },
             )
 
         return text
-
 
     async def _send_welcome_embed(self, member: discord.Member) -> None:
         channel = self._get_general(member.guild)
@@ -210,7 +215,10 @@ class WelcomeCog(commands.Cog):
         poem = await self._generate_cz_poem(member.display_name, kind="welcome")
 
         # Try name-based GIF, fallback to generic Czech terms
-        gif_url = await (self._fetch_tenor_gif(f"{member.display_name} vítání") or self._fetch_tenor_gif("uvítání"))
+        gif_url = await (
+            self._fetch_tenor_gif(f"{member.display_name} vítání")
+            or self._fetch_tenor_gif("uvítání")
+        )
 
         embed = discord.Embed(
             title=f"Vítej, {member.display_name}! 🎉",
@@ -220,32 +228,53 @@ class WelcomeCog(commands.Cog):
         embed.set_author(name=str(member), icon_url=member.display_avatar.url)
         if gif_url:
             embed.set_image(url=gif_url)
-        embed.add_field(name="Začni klidně pozdravem 👋", value=f"Vítej na **{member.guild.name}**!", inline=False)
-        embed.add_field(name="Tipy pro nováčky", value="Mrkni na připnuté zprávy a FAQ kanály.", inline=False)
+        embed.add_field(
+            name="Začni klidně pozdravem 👋",
+            value=f"Vítej na **{member.guild.name}**!",
+            inline=False,
+        )
+        embed.add_field(
+            name="Tipy pro nováčky", value="Mrkni na připnuté zprávy a FAQ kanály.", inline=False
+        )
         embed.set_footer(text=f"Uživatel ID: {member.id}")
 
         try:
-            await channel.send(content=f"Ahoj <@{member.id}>!", embed=embed,
-                               allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False))
+            await channel.send(
+                content=f"Ahoj <@{member.id}>!",
+                embed=embed,
+                allowed_mentions=discord.AllowedMentions(users=True, roles=False, everyone=False),
+            )
             if self.embed_logger:
                 await self.embed_logger.log_custom(
                     service="Welcome",
                     title="Uvítání zveřejněno",
                     description=f"Vítej embed pro <@{member.id}> v {channel.mention}",
                     level=LogLevel.SUCCESS,
-                    fields={"GIF": gif_url or "žádný", "Model": self.poem_model}
+                    fields={"GIF": gif_url or "žádný", "Model": self.poem_model},
                 )
         except discord.Forbidden as e:
             if self.embed_logger:
-                await self.embed_logger.log_error("Welcome", e, context=f"Chybí oprávnění v #{getattr(channel, 'id', '?')}")
+                await self.embed_logger.log_error(
+                    "Welcome", e, context=f"Chybí oprávnění v #{getattr(channel, 'id', '?')}"
+                )
         except Exception as e:
             if self.embed_logger:
-                await self.embed_logger.log_error("Welcome", e, context=f"Nezdařilo se poslat uvítání pro {member.id}")
+                await self.embed_logger.log_error(
+                    "Welcome", e, context=f"Nezdařilo se poslat uvítání pro {member.id}"
+                )
 
     async def _dm_new_member(self, member: discord.Member) -> None:
         # CZ onboarding DM
-        vr_ch = member.guild.get_channel(int(self.verification_channel_id)) if self.verification_channel_id else None
-        verify_hint = f"• Ověření: přejdi do {vr_ch.mention} a postupuj podle instrukcí." if vr_ch else "• Ověření: mrkni do uvítacího kanálu a postupuj podle instrukcí."
+        vr_ch = (
+            member.guild.get_channel(int(self.verification_channel_id))
+            if self.verification_channel_id
+            else None
+        )
+        verify_hint = (
+            f"• Ověření: přejdi do {vr_ch.mention} a postupuj podle instrukcí."
+            if vr_ch
+            else "• Ověření: mrkni do uvítacího kanálu a postupuj podle instrukcí."
+        )
 
         text = (
             f"Ahoj {member.display_name}! 👋\n\n"
@@ -264,30 +293,40 @@ class WelcomeCog(commands.Cog):
                     service="Welcome",
                     title="UVÍTACÍ DM odeslána",
                     description=f"Soukromá zpráva poslána uživateli <@{member.id}>",
-                    level=LogLevel.INFO
+                    level=LogLevel.INFO,
                 )
         except discord.Forbidden:
             if self.embed_logger:
                 await self.embed_logger.log_warning(
                     title="DM nelze doručit",
-                    description=f"Uživatel <@{member.id}> má uzavřené zprávy."
+                    description=f"Uživatel <@{member.id}> má uzavřené zprávy.",
                 )
         except Exception as e:
             if self.embed_logger:
-                await self.embed_logger.log_error("Welcome", e, context=f"DM selhala pro {member.id}")
+                await self.embed_logger.log_error(
+                    "Welcome", e, context=f"DM selhala pro {member.id}"
+                )
 
-    async def _send_farewell_embed(self, guild: discord.Guild, user: discord.abc.User, reason_label: str) -> None:
+    async def _send_farewell_embed(
+        self, guild: discord.Guild, user: discord.abc.User, reason_label: str
+    ) -> None:
         channel = self._get_general(guild)
         if not channel:
             return
 
-        poem = await self._generate_cz_poem(getattr(user, "display_name", user.name), kind=f"farewell:{reason_label}")
-        gif_url = await (self._fetch_tenor_gif(f"{user.name} rozloučení") or self._fetch_tenor_gif("rozloučení"))
+        poem = await self._generate_cz_poem(
+            getattr(user, "display_name", user.name), kind=f"farewell:{reason_label}"
+        )
+        gif_url = await (
+            self._fetch_tenor_gif(f"{user.name} rozloučení") or self._fetch_tenor_gif("rozloučení")
+        )
 
         embed = discord.Embed(
             title=f"Na rozloučenou, {user.name} 👋",
             description=poem,
-            color=discord.Color.orange() if reason_label != "zabanován" else discord.Color.dark_red(),
+            color=(
+                discord.Color.orange() if reason_label != "zabanován" else discord.Color.dark_red()
+            ),
         )
         if isinstance(user, (discord.Member, discord.User)):
             embed.set_author(name=str(user), icon_url=user.display_avatar.url)
@@ -303,11 +342,13 @@ class WelcomeCog(commands.Cog):
                     title="Rozloučení zveřejněno",
                     description=f"Zpráva při odchodu ({reason_label}) pro {user} v {channel.mention}",
                     level=LogLevel.INFO,
-                    fields={"GIF": gif_url or "žádný", "Model": self.poem_model}
+                    fields={"GIF": gif_url or "žádný", "Model": self.poem_model},
                 )
         except Exception as e:
             if self.embed_logger:
-                await self.embed_logger.log_error("Welcome", e, context=f"Nezdařilo se poslat rozloučení pro {user.id}")
+                await self.embed_logger.log_error(
+                    "Welcome", e, context=f"Nezdařilo se poslat rozloučení pro {user.id}"
+                )
 
     # ---------- events ----------
 

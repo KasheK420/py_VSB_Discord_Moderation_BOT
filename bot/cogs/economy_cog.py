@@ -1,13 +1,18 @@
 # bot/cogs/economy_cog.py
 from __future__ import annotations
-import time, logging
+
+import logging
+import time
+
 import discord
+from discord import Interaction, app_commands
 from discord.ext import commands
-from discord import app_commands, Interaction
+
 from bot.database.database_service import database_service
 from bot.database.queries.economy_queries import EconomyQueries
 
 logger = logging.getLogger(__name__)
+
 
 class EconomyCog(commands.Cog):
     """Simple XP/points system: per message and per reaction received."""
@@ -53,7 +58,9 @@ class EconomyCog(commands.Cog):
         if todays >= self.daily_cap:
             return
         xp = min(self.xp_msg, self.daily_cap - todays)
-        await EconomyQueries.add_message_xp(database_service.pool, message.author.id, xp, self.pt_msg)
+        await EconomyQueries.add_message_xp(
+            database_service.pool, message.author.id, xp, self.pt_msg
+        )
 
     @commands.Cog.listener()
     async def on_reaction_add(self, reaction: discord.Reaction, user: discord.User):
@@ -68,7 +75,9 @@ class EconomyCog(commands.Cog):
             return
         xp = min(self.xp_rx, self.daily_cap - todays)
         meta = f"emoji={reaction.emoji}, by={user.id}"
-        await EconomyQueries.add_reaction_received(database_service.pool, author.id, xp, self.pt_rx, meta)
+        await EconomyQueries.add_reaction_received(
+            database_service.pool, author.id, xp, self.pt_rx, meta
+        )
 
     # --- Slash ---
 
@@ -80,11 +89,13 @@ class EconomyCog(commands.Cog):
         st = await EconomyQueries.get_stats(database_service.pool, itx.user.id)
         if not st:
             return await itx.followup.send("Zatím nemáš žádná data.", ephemeral=True)
-        msg = (f"**{itx.user}**\n"
-               f"XP: **{st['xp']}**, Body: **{st['points']}**\n"
-               f"Úroveň: **{st['level']}**\n"
-               f"Zprávy: **{st['messages']}**, Reakce získané: **{st['reactions_received']}**\n"
-               f"Dnešní XP: **{st['daily_xp']}** / {self.daily_cap}")
+        msg = (
+            f"**{itx.user}**\n"
+            f"XP: **{st['xp']}**, Body: **{st['points']}**\n"
+            f"Úroveň: **{st['level']}**\n"
+            f"Zprávy: **{st['messages']}**, Reakce získané: **{st['reactions_received']}**\n"
+            f"Dnešní XP: **{st['daily_xp']}** / {self.daily_cap}"
+        )
         await itx.followup.send(msg, ephemeral=True)
 
     @group.command(name="top", description="Žebříček podle XP/bodů")
@@ -97,5 +108,7 @@ class EconomyCog(commands.Cog):
             return await itx.followup.send("Žádná data zatím nejsou.", ephemeral=True)
         lines = []
         for i, r in enumerate(rows, 1):
-            lines.append(f"**{i}.** <@{r['user_id']}> — XP:{r['xp']} Body:{r['points']} Msg:{r['messages']} Rx:{r['reactions_received']}")
+            lines.append(
+                f"**{i}.** <@{r['user_id']}> — XP:{r['xp']} Body:{r['points']} Msg:{r['messages']} Rx:{r['reactions_received']}"
+            )
         await itx.followup.send("\n".join(lines), ephemeral=True)

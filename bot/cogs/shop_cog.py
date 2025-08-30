@@ -1,16 +1,19 @@
 # bot/cogs/shop_cog.py
 from __future__ import annotations
+
 import logging
+
 import discord
+from discord import Interaction, app_commands
 from discord.ext import commands
-from discord import app_commands, Interaction
 
 from bot.database.database_service import database_service
-from bot.database.queries.shop_queries import ShopQueries
 from bot.database.queries.economy_queries import EconomyQueries
+from bot.database.queries.shop_queries import ShopQueries
 from bot.services.logging_service import LogLevel
 
 logger = logging.getLogger(__name__)
+
 
 class ShopCog(commands.Cog):
     """Jednoduchý shop: /shop list, /shop buy (odečte body), oznámí do kanálu s @ADMIN."""
@@ -40,7 +43,9 @@ class ShopCog(commands.Cog):
             return await itx.followup.send("Žádné položky zatím nejsou.", ephemeral=True)
         lines = []
         for it in items:
-            lines.append(f"**#{it['id']}** — {it['name']} • **{it['price']} bodů** • skladem: {it['stock']}\n{(it['description'] or '')}")
+            lines.append(
+                f"**#{it['id']}** — {it['name']} • **{it['price']} bodů** • skladem: {it['stock']}\n{(it['description'] or '')}"
+            )
         await itx.followup.send("\n\n".join(lines)[:1950], ephemeral=True)
 
     @group.command(name="buy", description="Koupit položku")
@@ -57,7 +62,9 @@ class ShopCog(commands.Cog):
         total = int(item["price"]) * qty
         # Check and spend points
         try:
-            await EconomyQueries.spend_points(database_service.pool, itx.user.id, total, meta=f"shop:buy:item#{item_id}x{qty}")
+            await EconomyQueries.spend_points(
+                database_service.pool, itx.user.id, total, meta=f"shop:buy:item#{item_id}x{qty}"
+            )
         except Exception:
             return await itx.followup.send("Nedostatek bodů.", ephemeral=True)
 
@@ -66,13 +73,15 @@ class ShopCog(commands.Cog):
             order = await ShopQueries.purchase(database_service.pool, itx.user.id, item_id, qty)
         except Exception as e:
             # refund in case of race error
-            await EconomyQueries.award_points(database_service.pool, itx.user.id, total, meta="shop:refund")
+            await EconomyQueries.award_points(
+                database_service.pool, itx.user.id, total, meta="shop:refund"
+            )
             return await itx.followup.send(f"Objednávka se nezdařila: {e}", ephemeral=True)
 
         await itx.followup.send(
             f"✅ Objednávka **#{order['order_id']}** — {item['name']} ×{qty} • zaplaceno **{total}** bodů.\n"
             f"Administrátoři budou informováni.",
-            ephemeral=True
+            ephemeral=True,
         )
 
         # Announce to channel
@@ -82,7 +91,7 @@ class ShopCog(commands.Cog):
             emb = discord.Embed(
                 title="🛒 Nová objednávka",
                 description=f"{itx.user.mention} objednal/a **{item['name']}** ×{qty}",
-                color=discord.Color.blurple()
+                color=discord.Color.blurple(),
             )
             emb.add_field(name="Cena", value=f"{total} bodů", inline=True)
             emb.add_field(name="Objednávka", value=f"#{order['order_id']}", inline=True)
@@ -93,16 +102,22 @@ class ShopCog(commands.Cog):
                 service="Shop",
                 title="Order placed",
                 description=f"user={itx.user} item#{item_id} qty={qty} price={total}",
-                level=LogLevel.SUCCESS
+                level=LogLevel.SUCCESS,
             )
 
     # --- Admin helper to add items ---
     @group.command(name="add", description="(Admin) Přidat položku do shopu")
     @app_commands.checks.has_permissions(administrator=True)
     @app_commands.describe(name="Název", price="Cena v bodech", stock="Sklad", description="Popis")
-    async def shop_add(self, itx: Interaction, name: str, price: int, stock: int, description: str = ""):
+    async def shop_add(
+        self, itx: Interaction, name: str, price: int, stock: int, description: str = ""
+    ):
         await itx.response.defer(ephemeral=True)
         if price < 0 or stock < 0:
             return await itx.followup.send("Cena/stock nemůže být záporný.", ephemeral=True)
-        item_id = await ShopQueries.add_item(database_service.pool, name, price, stock, description or None)
-        await itx.followup.send(f"✅ Přidáno **#{item_id}** — {name} • {price} bodů (skladem {stock})", ephemeral=True)
+        item_id = await ShopQueries.add_item(
+            database_service.pool, name, price, stock, description or None
+        )
+        await itx.followup.send(
+            f"✅ Přidáno **#{item_id}** — {name} • {price} bodů (skladem {stock})", ephemeral=True
+        )

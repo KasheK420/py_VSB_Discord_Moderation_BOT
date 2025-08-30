@@ -3,30 +3,25 @@ bot/main.py
 Slim bootstrap: init services, load cogs, sync slash commands (guild-first)
 Enhanced with comprehensive logging
 """
-import discord
-from discord.ext import commands
-from discord import app_commands
+
 import asyncio
 import logging
 import sys
 from pathlib import Path
 
+import discord
+from discord.ext import commands
+
 # Add parent directory to path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from bot.utils.logging_config import setup_logging
-from bot.utils.config import Config
-from bot.database.database_service import database_service
-from bot.services.logging_service import EmbedLogger, LogLevel
-from bot.services.auth_service import AuthService
-from bot.utils.webserver import OAuthWebServer
 from bot.cogs.ai import AICog
-
-from bot.services.service_loader import (
-    init_core_services,
-    init_ai_and_moderation,
-    get_onboarding,
-)
+from bot.database.database_service import database_service
+from bot.services.auth_service import AuthService
+from bot.services.logging_service import EmbedLogger, LogLevel
+from bot.utils.config import Config
+from bot.utils.logging_config import setup_logging
+from bot.utils.webserver import OAuthWebServer
 
 # Cog imports kept at bottom to avoid circular imports
 setup_logging()
@@ -50,17 +45,21 @@ class VSBBot(commands.Bot):
     async def setup_hook(self):
         """Called when the bot is starting up"""
         logger.info("Bot setup hook called - initializing services...")
-        
+
         # Record startup time
         from datetime import datetime
+
         self.startup_time = datetime.utcnow()
-        
+
         # Init core infra (DB, auth, web). Do NOT touch guild/channel here.
         try:
-            from bot.services.service_loader import init_core_services, init_ai_and_moderation, get_onboarding
-            self.embed_logger, self.auth_service, self.web_server = await init_core_services(self, self.config)
+            from bot.services.service_loader import init_ai_and_moderation, init_core_services
+
+            self.embed_logger, self.auth_service, self.web_server = await init_core_services(
+                self, self.config
+            )
             await init_ai_and_moderation(self, self.embed_logger)
-            
+
             logger.info("Core services initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize core services: {e}")
@@ -92,8 +91,8 @@ class VSBBot(commands.Bot):
                     "Bot User": f"{self.user.name}#{self.user.discriminator}",
                     "Bot ID": str(self.user.id),
                     "Guild Count": str(len(self.guilds)),
-                    "Cached Users": str(len(self.users))
-                }
+                    "Cached Users": str(len(self.users)),
+                },
             )
 
         # --- Validate configured entities (channels, roles, users) ---
@@ -103,9 +102,7 @@ class VSBBot(commands.Bot):
             logging.getLogger(__name__).warning(f"Config entity validation failed: {e}")
             if self.embed_logger:
                 await self.embed_logger.log_error(
-                    service="Bot Startup",
-                    error=e,
-                    context="Config entity validation failed"
+                    service="Bot Startup", error=e, context="Config entity validation failed"
                 )
 
         # Load cogs (slash-only) here to avoid cache issues
@@ -115,9 +112,14 @@ class VSBBot(commands.Bot):
             from bot.services.service_loader import get_onboarding
 
             # If logger was not created earlier, try once more here
-            if self.embed_logger is None and self.config.admin_log_channel_id and int(self.config.admin_log_channel_id) != 0:
+            if (
+                self.embed_logger is None
+                and self.config.admin_log_channel_id
+                and int(self.config.admin_log_channel_id) != 0
+            ):
                 try:
                     from bot.services.logging_service import EmbedLogger
+
                     self.embed_logger = EmbedLogger(self, int(self.config.admin_log_channel_id))
                     await self.embed_logger.setup()
                     await self.embed_logger.log_custom(
@@ -127,8 +129,8 @@ class VSBBot(commands.Bot):
                         level=LogLevel.SUCCESS,
                         fields={
                             "Channel ID": str(self.config.admin_log_channel_id),
-                            "Setup Method": "Post-ready initialization"
-                        }
+                            "Setup Method": "Post-ready initialization",
+                        },
                     )
                 except Exception as e:
                     logging.getLogger(__name__).warning(
@@ -148,8 +150,8 @@ class VSBBot(commands.Bot):
                     fields={
                         "Cogs Loaded": "AdminCog, VerificationCog, AICog",
                         "Total Cogs": str(len(self.cogs)),
-                        "Status": "All loaded"
-                    }
+                        "Status": "All loaded",
+                    },
                 )
 
             logger.info(f"Loaded {len(self.cogs)} cogs successfully")
@@ -160,7 +162,7 @@ class VSBBot(commands.Bot):
                 await self.embed_logger.log_error(
                     service="Bot Startup",
                     error=e,
-                    context="Failed to load bot cogs during post-login initialization"
+                    context="Failed to load bot cogs during post-login initialization",
                 )
 
         # Guild-first slash sync (cache-independent)
@@ -179,8 +181,8 @@ class VSBBot(commands.Bot):
                         level=LogLevel.SUCCESS,
                         fields={
                             "Channel": f"<#{self.config.welcome_channel_id}>",
-                            "Status": "Ready for verification"
-                        }
+                            "Status": "Ready for verification",
+                        },
                     )
         except Exception as e:
             logger.error(f"Failed to ensure welcome message: {e}")
@@ -188,7 +190,7 @@ class VSBBot(commands.Bot):
                 await self.embed_logger.log_error(
                     service="Bot Startup",
                     error=e,
-                    context="Failed to ensure welcome message in post-login initialization"
+                    context="Failed to ensure welcome message in post-login initialization",
                 )
 
     async def _validate_config_entities(self):
@@ -220,7 +222,19 @@ class VSBBot(commands.Bot):
                 ch = await self.fetch_channel(cid)
             except Exception:
                 ch = self.get_channel(cid)
-            return ch if isinstance(ch, (discord.TextChannel, discord.Thread, discord.VoiceChannel, discord.CategoryChannel)) else None
+            return (
+                ch
+                if isinstance(
+                    ch,
+                    (
+                        discord.TextChannel,
+                        discord.Thread,
+                        discord.VoiceChannel,
+                        discord.CategoryChannel,
+                    ),
+                )
+                else None
+            )
 
         # Collect candidate fields from Config by suffix
         cfg = self.config
@@ -279,20 +293,23 @@ class VSBBot(commands.Bot):
                 fields["Guild"] = results["guild_ok"] or f"Missing {results['guild_fail']}"
 
             if results["channels_ok"]:
-                fields["Channels OK"] = "\n".join(results["channels_ok"][:10]) + \
-                    (" ..." if len(results["channels_ok"]) > 10 else "")
+                fields["Channels OK"] = "\n".join(results["channels_ok"][:10]) + (
+                    " ..." if len(results["channels_ok"]) > 10 else ""
+                )
             if results["channels_fail"]:
                 fields["Channels Missing"] = "\n".join(results["channels_fail"])
 
             if results["roles_ok"]:
-                fields["Roles OK"] = "\n".join(results["roles_ok"][:10]) + \
-                    (" ..." if len(results["roles_ok"]) > 10 else "")
+                fields["Roles OK"] = "\n".join(results["roles_ok"][:10]) + (
+                    " ..." if len(results["roles_ok"]) > 10 else ""
+                )
             if results["roles_fail"]:
                 fields["Roles Missing"] = "\n".join(results["roles_fail"])
 
             if results["users_ok"]:
-                fields["Users OK"] = "\n".join(results["users_ok"][:10]) + \
-                    (" ..." if len(results["users_ok"]) > 10 else "")
+                fields["Users OK"] = "\n".join(results["users_ok"][:10]) + (
+                    " ..." if len(results["users_ok"]) > 10 else ""
+                )
             if results["users_fail"]:
                 fields["Users Missing"] = "\n".join(results["users_fail"])
 
@@ -300,8 +317,17 @@ class VSBBot(commands.Bot):
                 service="Config Validator",
                 title="Configuration Entities Verified",
                 description="Checked channels, roles, users configured in environment",
-                level=LogLevel.SUCCESS if not (results["channels_fail"] or results["roles_fail"] or results["users_fail"] or results["guild_fail"]) else LogLevel.WARNING,
-                fields=fields
+                level=(
+                    LogLevel.SUCCESS
+                    if not (
+                        results["channels_fail"]
+                        or results["roles_fail"]
+                        or results["users_fail"]
+                        or results["guild_fail"]
+                    )
+                    else LogLevel.WARNING
+                ),
+                fields=fields,
             )
 
         # Also print to console for visibility
@@ -313,12 +339,14 @@ class VSBBot(commands.Bot):
             # Guild sync first (fast)
             gobj = discord.Object(id=self.config.guild_id)
             synced_guild = await self.tree.sync(guild=gobj)
-            logger.info(f"Synced {len(synced_guild)} guild slash command(s) to {self.config.guild_id}")
-            
+            logger.info(
+                f"Synced {len(synced_guild)} guild slash command(s) to {self.config.guild_id}"
+            )
+
             # Global sync (slower, up to 1 hour propagation)
             synced_global = await self.tree.sync()
             logger.info(f"Synced {len(synced_global)} global slash command(s)")
-            
+
             if self.embed_logger:
                 await self.embed_logger.log_custom(
                     service="Bot Startup",
@@ -330,16 +358,16 @@ class VSBBot(commands.Bot):
                         "Guild Commands": str(len(synced_guild)),
                         "Global Commands": str(len(synced_global)),
                         "Guild Sync": "✅ Immediate",
-                        "Global Sync": "⏳ Up to 1 hour propagation"
-                    }
+                        "Global Sync": "⏳ Up to 1 hour propagation",
+                    },
                 )
         except Exception as e:
             logger.exception("Slash command sync failed")
             if self.embed_logger:
                 await self.embed_logger.log_error(
-                    service="Bot Startup", 
-                    error=e, 
-                    context="Slash command sync failed during startup"
+                    service="Bot Startup",
+                    error=e,
+                    context="Slash command sync failed during startup",
                 )
 
     async def on_ready(self):
@@ -347,151 +375,167 @@ class VSBBot(commands.Bot):
         startup_duration = None
         if self.startup_time:
             from datetime import datetime
+
             startup_duration = (datetime.utcnow() - self.startup_time).total_seconds()
-        
+
         logger.info(f"Logged in as {self.user} ({self.user.id})")
-        
+
         # Set bot presence
         await self.change_presence(
-            activity=discord.Activity(type=discord.ActivityType.watching, name="for verification requests")
+            activity=discord.Activity(
+                type=discord.ActivityType.watching, name="for verification requests"
+            )
         )
-        
+
         if self.embed_logger:
             guild_info = []
             for guild in self.guilds:
                 member_count = guild.member_count or len([m for m in guild.members if not m.bot])
                 guild_info.append(f"{guild.name} ({member_count} members)")
-            
+
             await self.embed_logger.log_custom(
                 service="Bot Status",
                 title="🚀 Bot Ready",
-                description=f"VSB Discord Bot is now online and ready to serve!",
+                description="VSB Discord Bot is now online and ready to serve!",
                 level=LogLevel.SUCCESS,
                 fields={
                     "Bot": f"{self.user.name}#{self.user.discriminator}",
                     "Bot ID": str(self.user.id),
                     "Startup Time": f"{startup_duration:.2f}s" if startup_duration else "Unknown",
                     "Guilds": str(len(self.guilds)),
-                    "Guild Details": "\n".join(guild_info[:3]) + ("..." if len(guild_info) > 3 else ""),
+                    "Guild Details": "\n".join(guild_info[:3])
+                    + ("..." if len(guild_info) > 3 else ""),
                     "Cached Users": str(len(self.users)),
                     "Cogs Loaded": str(len(self.cogs)),
                     "Activity": "Watching for verification requests",
-                    "Status": "🟢 Online and Ready"
-                }
+                    "Status": "🟢 Online and Ready",
+                },
             )
 
     async def on_guild_join(self, guild: discord.Guild):
         """Called when bot joins a new guild"""
         logger.info(f"Joined guild: {guild.name} ({guild.id}) with {guild.member_count} members")
-        
+
         if self.embed_logger:
             await self.embed_logger.log_custom(
                 service="Bot Status",
                 title="Guild Joined",
-                description=f"Bot joined a new Discord server",
+                description="Bot joined a new Discord server",
                 level=LogLevel.INFO,
                 fields={
                     "Guild": guild.name,
                     "Guild ID": str(guild.id),
                     "Members": str(guild.member_count or len(guild.members)),
-                    "Owner": f"{guild.owner.name}#{guild.owner.discriminator}" if guild.owner else "Unknown",
+                    "Owner": (
+                        f"{guild.owner.name}#{guild.owner.discriminator}"
+                        if guild.owner
+                        else "Unknown"
+                    ),
                     "Created": guild.created_at.strftime("%Y-%m-%d"),
-                    "Features": ", ".join(guild.features[:5]) if guild.features else "None"
-                }
+                    "Features": ", ".join(guild.features[:5]) if guild.features else "None",
+                },
             )
 
     async def on_guild_remove(self, guild: discord.Guild):
         """Called when bot is removed from a guild"""
         logger.info(f"Left guild: {guild.name} ({guild.id})")
-        
+
         if self.embed_logger:
             await self.embed_logger.log_custom(
                 service="Bot Status",
                 title="Guild Left",
-                description=f"Bot was removed from a Discord server",
+                description="Bot was removed from a Discord server",
                 level=LogLevel.WARNING,
                 fields={
                     "Guild": guild.name,
                     "Guild ID": str(guild.id),
                     "Members": str(guild.member_count or len(guild.members)),
-                    "Reason": "Removed/banned from server"
-                }
+                    "Reason": "Removed/banned from server",
+                },
             )
 
     async def on_error(self, event: str, *args, **kwargs):
         """Global error handler"""
         logger.exception(f"Error in event {event}")
-        
+
         if self.embed_logger:
             import traceback
+
             error_info = traceback.format_exc()
             await self.embed_logger.log_error(
                 service="Bot Core",
                 error=Exception(f"Event error: {event}"),
-                context=f"Global error in event {event} - Args: {len(args)}, Kwargs: {len(kwargs)}"
+                context=f"Global error in event {event} - Args: {len(args)}, Kwargs: {len(kwargs)}",
             )
 
     async def on_command_error(self, ctx: commands.Context, error: commands.CommandError):
         """Handle command errors"""
         logger.error(f"Command error in {ctx.command}: {error}")
-        
+
         if self.embed_logger:
             await self.embed_logger.log_error(
                 service="Bot Commands",
                 error=error,
-                context=f"Command error - Command: {ctx.command}, User: {ctx.author.id}, Guild: {ctx.guild.id if ctx.guild else 'DM'}"
+                context=f"Command error - Command: {ctx.command}, User: {ctx.author.id}, Guild: {ctx.guild.id if ctx.guild else 'DM'}",
             )
 
     async def close(self):
         """Clean shutdown"""
         logger.info("Bot shutting down...")
-        
+
         if self.embed_logger:
             uptime = None
             if self.startup_time:
                 from datetime import datetime
+
                 uptime = (datetime.utcnow() - self.startup_time).total_seconds()
-            
+
             await self.embed_logger.log_custom(
                 service="Bot Status",
                 title="🔴 Bot Shutting Down",
                 description="VSB Discord Bot is shutting down",
                 level=LogLevel.WARNING,
                 fields={
-                    "Bot": f"{self.user.name}#{self.user.discriminator}" if self.user else "Unknown",
-                    "Uptime": f"{uptime:.2f}s ({uptime//3600:.0f}h {(uptime%3600)//60:.0f}m)" if uptime else "Unknown",
+                    "Bot": (
+                        f"{self.user.name}#{self.user.discriminator}" if self.user else "Unknown"
+                    ),
+                    "Uptime": (
+                        f"{uptime:.2f}s ({uptime//3600:.0f}h {(uptime%3600)//60:.0f}m)"
+                        if uptime
+                        else "Unknown"
+                    ),
                     "Guilds Served": str(len(self.guilds)),
                     "Reason": "Graceful shutdown",
-                    "Status": "🔴 Offline"
-                }
+                    "Status": "🔴 Offline",
+                },
             )
-        
+
         # Close services
         if self.web_server:
             try:
                 await self.web_server.stop()
             except Exception as e:
                 logger.error(f"Error stopping web server: {e}")
-        
+
         try:
             await self.db_service.close()
         except Exception as e:
             logger.error(f"Error closing database: {e}")
-        
+
         await super().close()
 
 
 async def main():
     """Main entry point"""
     config = Config()
-    
+
     # Validate critical configuration
     missing_config = []
     if not config.bot_token:
         missing_config.append("DISCORD_BOT_TOKEN")
     if not config.db_password:
         missing_config.append("DB_PASSWORD")
-    
+
     if missing_config:
         logger.error(f"Missing critical configuration: {', '.join(missing_config)}")
         return
@@ -505,7 +549,7 @@ async def main():
     logger.info("=" * 60)
 
     bot = VSBBot(config)
-    
+
     try:
         await bot.start(config.bot_token)
     except KeyboardInterrupt:
@@ -522,7 +566,7 @@ async def main():
 if __name__ == "__main__":
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-    
+
     try:
         asyncio.run(main())
     except KeyboardInterrupt:

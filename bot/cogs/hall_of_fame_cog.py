@@ -1,15 +1,19 @@
 # bot/cogs/hall_of_fame_cog.py
 from __future__ import annotations
-import logging, os
+
+import logging
+
 import discord
 from discord.ext import commands
-from bot.services.logging_service import LogLevel
+
 from bot.database.database_service import database_service
 from bot.database.queries.hof_queries import HOFQueries
+from bot.services.logging_service import LogLevel
 from bot.services.message_render_service import render_message_card
 from bot.utils.ai_helper import get_ai_service
 
 logger = logging.getLogger(__name__)
+
 
 class HallOfFameCog(commands.Cog):
     """Posts messages that reach reaction threshold into Hall of Fame channel with an AI quip (CZ)."""
@@ -47,7 +51,7 @@ class HallOfFameCog(commands.Cog):
                     f"Autor: {message.author.display_name}. Buď přátelský a nezesměšňuj nikoho."
                 )
                 r = await ai.generate_response(
-                    messages=[{"role":"user","content":user}],
+                    messages=[{"role": "user", "content": user}],
                     system_prompt=system,
                     max_tokens=60,
                     temperature=0.7,
@@ -66,7 +70,7 @@ class HallOfFameCog(commands.Cog):
         emb = discord.Embed(
             title="🏆 Hall of Fame",
             description=quip or f"{message.author.display_name} nasbíral/a **{total}** reakcí!",
-            color=discord.Color.gold()
+            color=discord.Color.gold(),
         )
         emb.add_field(name="Odkaz", value=f"[Přejít na zprávu]({message.jump_url})", inline=False)
         emb.set_author(name=message.author.display_name, icon_url=message.author.display_avatar.url)
@@ -87,7 +91,7 @@ class HallOfFameCog(commands.Cog):
                 title="Posted to HOF",
                 description=f"Message {message.id} → {sent.jump_url}",
                 level=LogLevel.SUCCESS,
-                fields={"Total reactions": str(total)}
+                fields={"Total reactions": str(total)},
             )
 
     async def _check_message(self, message: discord.Message):

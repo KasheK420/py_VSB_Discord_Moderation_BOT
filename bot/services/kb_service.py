@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import asyncpg
 
@@ -20,10 +20,10 @@ logger = logging.getLogger(__name__)
 class KBArticle:
     id: int
     title: str
-    url: Optional[str]
-    category: Optional[str]
+    url: str | None
+    category: str | None
     body: str
-    tags: List[str]
+    tags: list[str]
 
 
 class KBService:
@@ -37,10 +37,10 @@ class KBService:
         *,
         title: str,
         body: str,
-        url: Optional[str] = None,
-        category: Optional[str] = None,
-        tags: Optional[List[str]] = None,
-        article_id: Optional[int] = None,
+        url: str | None = None,
+        category: str | None = None,
+        tags: list[str] | None = None,
+        article_id: int | None = None,
     ) -> int:
         """Insert or update a KB article. Returns the article id."""
         tags = tags or []
@@ -70,7 +70,7 @@ class KBService:
                 row = await conn.fetchrow(q, title, url, category, body, tags)
         return int(row["id"])
 
-    async def get_article(self, article_id: int) -> Optional[KBArticle]:
+    async def get_article(self, article_id: int) -> KBArticle | None:
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow("select * from kb_articles where id = $1", article_id)
         if not row:
@@ -84,10 +84,12 @@ class KBService:
             tags=list(row["tags"] or []),
         )
 
-    async def list_articles(self, limit: int = 50, offset: int = 0) -> List[KBArticle]:
+    async def list_articles(self, limit: int = 50, offset: int = 0) -> list[KBArticle]:
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(
-                "select * from kb_articles order by updated_at desc limit $1 offset $2", limit, offset
+                "select * from kb_articles order by updated_at desc limit $1 offset $2",
+                limit,
+                offset,
             )
         return [
             KBArticle(
@@ -115,7 +117,7 @@ class KBService:
         limit: int = 5,
         min_rank: float = 0.02,
         min_trgm: float = 0.15,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Hybrid search:
           1) Full-text rank on 'simple' + unaccent.
@@ -170,7 +172,7 @@ class KBService:
 
     # ---------- Auto-replies bookkeeping ----------
 
-    async def mark_replied(self, thread_id: int, post_message_id: int, kb_ids: List[int]) -> None:
+    async def mark_replied(self, thread_id: int, post_message_id: int, kb_ids: list[int]) -> None:
         async with self.pool.acquire() as conn:
             await conn.execute(
                 """
@@ -186,7 +188,9 @@ class KBService:
 
     async def was_replied(self, thread_id: int) -> bool:
         async with self.pool.acquire() as conn:
-            row = await conn.fetchrow("select 1 from kb_auto_replies where thread_id = $1", thread_id)
+            row = await conn.fetchrow(
+                "select 1 from kb_auto_replies where thread_id = $1", thread_id
+            )
         return bool(row)
 
     async def record_feedback(self, thread_id: int, helpful: bool, user_id: int) -> None:

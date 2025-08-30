@@ -3,18 +3,18 @@ bot/database/models/sqlalchemy_models.py
 SQLAlchemy models for Alembic migrations
 """
 
-from sqlalchemy import Column, String, Integer, SmallInteger, DateTime, Text, JSON
+from sqlalchemy import JSON, Column, DateTime, Integer, SmallInteger, String, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
-from datetime import datetime
 
 Base = declarative_base()
 
 
 class User(Base):
     """User model for Discord bot authentication"""
-    __tablename__ = 'users'
-    
+
+    __tablename__ = "users"
+
     id = Column(String(20), primary_key=True)  # Discord user ID
     login = Column(String(10), nullable=False, unique=True)  # VSB login
     activity = Column(SmallInteger, default=0)  # 0=inactive, 1=active
@@ -29,8 +29,9 @@ class User(Base):
 
 class Poll(Base):
     """Poll model for Discord polls"""
-    __tablename__ = 'polls'
-    
+
+    __tablename__ = "polls"
+
     id = Column(String(48), primary_key=True)  # Message ID + Channel ID
     start = Column(DateTime, nullable=False)
     end = Column(DateTime, nullable=False)
@@ -44,8 +45,9 @@ class Poll(Base):
 
 class SchemaVersion(Base):
     """Track schema versions for manual migrations"""
-    __tablename__ = 'schema_version'
-    
+
+    __tablename__ = "schema_version"
+
     id = Column(Integer, primary_key=True, autoincrement=True)
     version = Column(Integer, nullable=False)
     applied_at = Column(DateTime, default=func.now())

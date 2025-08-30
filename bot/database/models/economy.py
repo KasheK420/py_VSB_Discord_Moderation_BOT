@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 
+
 @dataclass
 class XPStats:
     user_id: int
@@ -12,11 +13,12 @@ class XPStats:
     reactions_received: int
     last_updated: datetime
 
+
 @dataclass
 class XPEvent:
     id: int
     user_id: int
-    kind: str    # 'message' | 'reaction_received' | 'admin_adjust'
+    kind: str  # 'message' | 'reaction_received' | 'admin_adjust'
     delta_xp: int
     delta_points: int
     at: datetime

@@ -1,10 +1,11 @@
 # bot/services/tenor_service.py
 from __future__ import annotations
 
-import aiohttp
 import logging
 import random
-from typing import List, Optional, Dict, Any
+from typing import Any
+
+import aiohttp
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +15,7 @@ class TenorClient:
     Minimal Tenor API v2 client for GIF search.
     Docs: https://tenor.com/gifapi/documentation
     """
+
     BASE_URL = "https://tenor.googleapis.com/v2"
 
     def __init__(
@@ -33,7 +35,7 @@ class TenorClient:
     def is_enabled(self) -> bool:
         return bool(self.api_key)
 
-    async def _get(self, path: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    async def _get(self, path: str, params: dict[str, Any]) -> dict[str, Any]:
         url = f"{self.BASE_URL}{path}"
         async with aiohttp.ClientSession() as session:
             async with session.get(url, params=params, timeout=8) as resp:
@@ -46,7 +48,7 @@ class TenorClient:
         *,
         limit: int = 8,
         randomize: bool = True,
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Returns a list of GIF URLs (prefer full gif, fallback tinygif).
         """
@@ -69,7 +71,7 @@ class TenorClient:
             logger.warning(f"Tenor search failed for '{query}': {e}")
             return []
 
-        out: List[str] = []
+        out: list[str] = []
         for item in data.get("results", []):
             media = item.get("media_formats") or {}
             url = None
@@ -84,6 +86,6 @@ class TenorClient:
             random.shuffle(out)
         return out
 
-    async def best_gif(self, query: str) -> Optional[str]:
+    async def best_gif(self, query: str) -> str | None:
         hits = await self.search_gifs(query, limit=6, randomize=True)
         return hits[0] if hits else None

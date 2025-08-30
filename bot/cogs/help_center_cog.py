@@ -1,16 +1,15 @@
 # bot/cogs/help_center_cog.py
 import asyncio
 import logging
-from typing import Optional, List
 
 import discord
+from discord import Interaction, app_commands
 from discord.ext import commands
-from discord import app_commands, Interaction
 
+from bot.database.database_service import get_database_service  # adjust if your path differs
 from bot.services.kb_service import KBService
 from bot.services.logging_service import LogLevel
 from bot.utils.ai_helper import get_ai_service
-from bot.database.database_service import get_database_service  # adjust if your path differs
 
 logger = logging.getLogger(__name__)
 
@@ -27,11 +26,13 @@ class HelpCenterCog(commands.Cog):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.forum_channel_id: Optional[int] = getattr(self.bot.config, "help_center_forum_channel_id", None)
+        self.forum_channel_id: int | None = getattr(
+            self.bot.config, "help_center_forum_channel_id", None
+        )
         self.embed_logger = getattr(self.bot, "embed_logger", None)
 
         # Services (lazy)
-        self.kb: Optional[KBService] = None
+        self.kb: KBService | None = None
 
     async def _ensure_services(self):
         if self.kb is None:
@@ -70,7 +71,7 @@ class HelpCenterCog(commands.Cog):
 
         # Build facts bloc for model
         bullet_lines = []
-        kb_ids: List[int] = []
+        kb_ids: list[int] = []
         for r in results:
             kb_ids.append(r["id"])
             line = f"- {r['title']}"
@@ -120,19 +121,27 @@ class HelpCenterCog(commands.Cog):
 
         class HelpfulBtn(discord.ui.Button):
             def __init__(self, parent: "HelpCenterCog", helpful: bool):
-                super().__init__(style=discord.ButtonStyle.success if helpful else discord.ButtonStyle.secondary,
-                                 label="Helpful ✅" if helpful else "Not Helpful ❌",
-                                 row=0)
+                super().__init__(
+                    style=discord.ButtonStyle.success if helpful else discord.ButtonStyle.secondary,
+                    label="Helpful ✅" if helpful else "Not Helpful ❌",
+                    row=0,
+                )
                 self.parent = parent
                 self.helpful = helpful
 
             async def callback(self, interaction: discord.Interaction):
                 await self.parent._ensure_services()
                 if self.parent.kb:
-                    await self.parent.kb.record_feedback(thread.id, self.helpful, interaction.user.id)
+                    await self.parent.kb.record_feedback(
+                        thread.id, self.helpful, interaction.user.id
+                    )
                 await interaction.response.send_message(
-                    "Thanks for the feedback!" if self.helpful else "Thanks — we will improve this.",
-                    ephemeral=True
+                    (
+                        "Thanks for the feedback!"
+                        if self.helpful
+                        else "Thanks — we will improve this."
+                    ),
+                    ephemeral=True,
                 )
 
         view.add_item(HelpfulBtn(self, True))
@@ -222,10 +231,10 @@ class HelpCenterCog(commands.Cog):
         interaction: Interaction,
         title: str,
         body: str,
-        url: Optional[str] = None,
-        category: Optional[str] = None,
-        tags: Optional[str] = None,
-        article_id: Optional[int] = None,
+        url: str | None = None,
+        category: str | None = None,
+        tags: str | None = None,
+        article_id: int | None = None,
     ):
         await interaction.response.defer(ephemeral=True)
         await self._ensure_services()
@@ -251,7 +260,7 @@ class HelpCenterCog(commands.Cog):
 
     @group.command(name="search", description="Search KB manually (test what the bot would find)")
     @app_commands.describe(query="What to search for", limit="How many results")
-    async def kb_search(self, interaction: Interaction, query: str, limit: Optional[int] = 5):
+    async def kb_search(self, interaction: Interaction, query: str, limit: int | None = 5):
         await interaction.response.defer(ephemeral=True)
         await self._ensure_services()
         hits = await self.kb.search(query, limit=limit or 5)

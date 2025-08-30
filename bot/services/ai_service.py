@@ -3,55 +3,145 @@ bot/services/ai_service.py
 AI service using Groq API for Discord bot with comprehensive logging
 """
 
-import aiohttp
-import asyncio
+import json
 import logging
 import random
-from typing import List, Dict, Optional, Any
-from datetime import datetime
-import json
 from collections import defaultdict, deque  # <-- added
+from datetime import datetime
+from typing import Any
 
-from ..utils.config import Config
+import aiohttp
+
 from bot.services.logging_service import EmbedLogger, LogLevel
 
-
+from ..utils.config import Config
 
 logger = logging.getLogger(__name__)
 
+
 def __service__():
     return AIService()
+
 
 class AIService:
     """AI service for handling LLM requests via Groq API"""
 
     def __init__(self):
         self.config = Config()
-        self.embed_logger: Optional[EmbedLogger] = None
-        self.groq_api_key: Optional[str] = None
+        self.embed_logger: EmbedLogger | None = None
+        self.groq_api_key: str | None = None
         self.supported_api_models: set[str] = set()
         self.groq_base_url = "https://api.groq.com/openai/v1"
 
         # Model registry with metadata
         self.MODEL_REGISTRY = {
             # Production
-            "llama-3-1-8b-128k":   {"display": "Llama 3.1 8B Instant 128k", "api_name": "llama-3.1-8b-instant", "ctx": 131_072, "tps": 840, "in_price": 0.05, "out_price": 0.08},
-            "llama-3-3-70b-128k":  {"display": "Llama 3.3 70B Versatile 128k", "api_name": "llama-3.3-70b-versatile", "ctx": 131_072, "tps": 394, "in_price": 0.59, "out_price": 0.79},
-            "llama-guard-4-12b":   {"display": "Llama Guard 4 12B 128k", "api_name": "meta-llama/llama-guard-4-12b", "ctx": 131_072, "tps": 325, "in_price": 0.20, "out_price": 0.20},
-            "gpt-oss-120b":        {"display": "OpenAI GPT-OSS 120B", "api_name": "openai/gpt-oss-120b", "ctx": 131_072, "tps": 500, "in_price": 0.15, "out_price": 0.75},
-            "gpt-oss-20b":         {"display": "OpenAI GPT-OSS 20B",  "api_name": "openai/gpt-oss-20b",  "ctx": 131_072, "tps": 1000, "in_price": 0.10, "out_price": 0.50},
-
+            "llama-3-1-8b-128k": {
+                "display": "Llama 3.1 8B Instant 128k",
+                "api_name": "llama-3.1-8b-instant",
+                "ctx": 131_072,
+                "tps": 840,
+                "in_price": 0.05,
+                "out_price": 0.08,
+            },
+            "llama-3-3-70b-128k": {
+                "display": "Llama 3.3 70B Versatile 128k",
+                "api_name": "llama-3.3-70b-versatile",
+                "ctx": 131_072,
+                "tps": 394,
+                "in_price": 0.59,
+                "out_price": 0.79,
+            },
+            "llama-guard-4-12b": {
+                "display": "Llama Guard 4 12B 128k",
+                "api_name": "meta-llama/llama-guard-4-12b",
+                "ctx": 131_072,
+                "tps": 325,
+                "in_price": 0.20,
+                "out_price": 0.20,
+            },
+            "gpt-oss-120b": {
+                "display": "OpenAI GPT-OSS 120B",
+                "api_name": "openai/gpt-oss-120b",
+                "ctx": 131_072,
+                "tps": 500,
+                "in_price": 0.15,
+                "out_price": 0.75,
+            },
+            "gpt-oss-20b": {
+                "display": "OpenAI GPT-OSS 20B",
+                "api_name": "openai/gpt-oss-20b",
+                "ctx": 131_072,
+                "tps": 1000,
+                "in_price": 0.10,
+                "out_price": 0.50,
+            },
             # Preview (IDs exactly as in docs)
-            "deepseek-r1-llama70b": {"display": "DeepSeek R1 Distill Llama 70B 128k", "api_name": "deepseek-r1-distill-llama-70b", "ctx": 131_072, "tps": 400, "in_price": 0.75, "out_price": 0.99},
-            "llama4-maverick":      {"display": "Llama 4 Maverick (17Bx128E) 128k",   "api_name": "meta-llama/llama-4-maverick-17b-128e-instruct", "ctx": 131_072, "tps": 562, "in_price": 0.20, "out_price": 0.60},
-            "llama4-scout":         {"display": "Llama 4 Scout (17Bx16E) 128k",       "api_name": "meta-llama/llama-4-scout-17b-16e-instruct",     "ctx": 131_072, "tps": 594, "in_price": 0.11, "out_price": 0.34},
-            "qwen3-32b":            {"display": "Qwen3 32B 131k",                     "api_name": "qwen/qwen3-32b",                               "ctx": 131_072, "tps": 662, "in_price": 0.29, "out_price": 0.59},
-
+            "deepseek-r1-llama70b": {
+                "display": "DeepSeek R1 Distill Llama 70B 128k",
+                "api_name": "deepseek-r1-distill-llama-70b",
+                "ctx": 131_072,
+                "tps": 400,
+                "in_price": 0.75,
+                "out_price": 0.99,
+            },
+            "llama4-maverick": {
+                "display": "Llama 4 Maverick (17Bx128E) 128k",
+                "api_name": "meta-llama/llama-4-maverick-17b-128e-instruct",
+                "ctx": 131_072,
+                "tps": 562,
+                "in_price": 0.20,
+                "out_price": 0.60,
+            },
+            "llama4-scout": {
+                "display": "Llama 4 Scout (17Bx16E) 128k",
+                "api_name": "meta-llama/llama-4-scout-17b-16e-instruct",
+                "ctx": 131_072,
+                "tps": 594,
+                "in_price": 0.11,
+                "out_price": 0.34,
+            },
+            "qwen3-32b": {
+                "display": "Qwen3 32B 131k",
+                "api_name": "qwen/qwen3-32b",
+                "ctx": 131_072,
+                "tps": 662,
+                "in_price": 0.29,
+                "out_price": 0.59,
+            },
             # Keep your Groq classics too (they still work)
-            "llama3-8b-8192":       {"display": "Llama 3 8B 8k (Groq)", "api_name": "llama3-8b-8192", "ctx": 8192, "tps": 1300, "in_price": None, "out_price": None},
-            "llama3-70b-8192":      {"display": "Llama 3 70B 8k (Groq)", "api_name": "llama3-70b-8192","ctx": 8192, "tps": 300, "in_price": None, "out_price": None},
-            "mixtral-8x7b-32768":   {"display": "Mixtral 8x7B 32k (Groq)","api_name": "mixtral-8x7b-32768","ctx": 32768, "tps": 250, "in_price": None, "out_price": None},
-            "gemma-7b-it":          {"display": "Gemma 7B Instruct (Groq)","api_name": "gemma-7b-it", "ctx": 8192, "tps": 600, "in_price": None, "out_price": None},
+            "llama3-8b-8192": {
+                "display": "Llama 3 8B 8k (Groq)",
+                "api_name": "llama3-8b-8192",
+                "ctx": 8192,
+                "tps": 1300,
+                "in_price": None,
+                "out_price": None,
+            },
+            "llama3-70b-8192": {
+                "display": "Llama 3 70B 8k (Groq)",
+                "api_name": "llama3-70b-8192",
+                "ctx": 8192,
+                "tps": 300,
+                "in_price": None,
+                "out_price": None,
+            },
+            "mixtral-8x7b-32768": {
+                "display": "Mixtral 8x7B 32k (Groq)",
+                "api_name": "mixtral-8x7b-32768",
+                "ctx": 32768,
+                "tps": 250,
+                "in_price": None,
+                "out_price": None,
+            },
+            "gemma-7b-it": {
+                "display": "Gemma 7B Instruct (Groq)",
+                "api_name": "gemma-7b-it",
+                "ctx": 8192,
+                "tps": 600,
+                "in_price": None,
+                "out_price": None,
+            },
         }
 
         # Default model key (friendly key)  <-- changed to the 8B Instant
@@ -59,7 +149,7 @@ class AIService:
 
         # Rate limiting (service-level RPM)
         self.requests_per_minute = 30
-        self.requests_made: List[datetime] = []
+        self.requests_made: list[datetime] = []
 
         # Per-user usage limits (rolling windows)  <-- NEW
         self.user_limits = {
@@ -67,11 +157,13 @@ class AIService:
             "per_day": 50,
             "per_week": 200,
         }
-        self.user_events = defaultdict(lambda: {
-            "hour": deque(),
-            "day": deque(),
-            "week": deque(),
-        })
+        self.user_events = defaultdict(
+            lambda: {
+                "hour": deque(),
+                "day": deque(),
+                "week": deque(),
+            }
+        )
 
         # Language directive for non-moderation tasks
         self._preserve_language_directive = (
@@ -79,8 +171,8 @@ class AIService:
             "requests another language. If the input contains multiple languages, reply in the "
             "primary language of the user's message."
         )
-        
-    def get_default_personas(self) -> List[Dict[str, str]]:
+
+    def get_default_personas(self) -> list[dict[str, str]]:
         """Built-in personas for fun tag replies."""
         return [
             {
@@ -90,7 +182,7 @@ class AIService:
                     "Answer like a witty pirate captain at sea. Sprinkle light nautical phrases, be playful "
                     "but always helpful. Keep replies short (1-3 sentences). No profanity or insults."
                 ),
-                "prefix": "Pirate"
+                "prefix": "Pirate",
             },
             {
                 "key": "grandma",
@@ -99,7 +191,7 @@ class AIService:
                     "Answer like a kind, wholesome grandmother who bakes and gives gentle advice. "
                     "Be warm and encouraging. Keep replies short (1-3 sentences)."
                 ),
-                "prefix": "Grandma"
+                "prefix": "Grandma",
             },
             {
                 "key": "cyberpunk",
@@ -108,7 +200,7 @@ class AIService:
                     "Answer like a cool cyberpunk netrunner. Use subtle futuristic vibe, but keep practical. "
                     "Short and helpful (1-3 sentences)."
                 ),
-                "prefix": "Netrunner"
+                "prefix": "Netrunner",
             },
             {
                 "key": "bard",
@@ -117,7 +209,7 @@ class AIService:
                     "Answer like a medieval bard. Light rhyme or rhythm is okay, keep it tasteful and brief "
                     "(1-3 sentences). Focus on being helpful."
                 ),
-                "prefix": "Bard"
+                "prefix": "Bard",
             },
             {
                 "key": "haiku",
@@ -126,7 +218,7 @@ class AIService:
                     "Answer as a minimalist poet. Use a calm tone. Prefer 1-2 short lines, haiku-like when possible. "
                     "Keep the info correct and useful."
                 ),
-                "prefix": "Haiku"
+                "prefix": "Haiku",
             },
             {
                 "key": "dm",
@@ -135,7 +227,7 @@ class AIService:
                     "Answer like a friendly tabletop Dungeon Master describing outcomes clearly and briefly. "
                     "1-3 sentences, helpful and direct."
                 ),
-                "prefix": "DM"
+                "prefix": "DM",
             },
             {
                 "key": "shakespeare",
@@ -144,7 +236,7 @@ class AIService:
                     "Answer with a light Shakespearean flair. Flowery but concise (1-3 sentences). "
                     "Clarity over theatrics."
                 ),
-                "prefix": "Shakespeare"
+                "prefix": "Shakespeare",
             },
             {
                 "key": "support",
@@ -153,11 +245,11 @@ class AIService:
                     "Answer like a friendly tech support agent. Polite, concise, and solution-focused "
                     "(1-3 sentences)."
                 ),
-                "prefix": "Support"
+                "prefix": "Support",
             },
         ]
 
-    def choose_persona(self, forced_key: Optional[str] = None) -> Dict[str, str]:
+    def choose_persona(self, forced_key: str | None = None) -> dict[str, str]:
         """
         Return a persona dict. If forced_key matches a key or name (case-insensitive), use it;
         otherwise choose randomly from default list.
@@ -171,17 +263,17 @@ class AIService:
         return random.choice(personas)
 
     # Registry helpers
-    def get_model_registry(self) -> Dict[str, Dict[str, Any]]:
+    def get_model_registry(self) -> dict[str, dict[str, Any]]:
         return self.MODEL_REGISTRY
 
-    def get_available_models(self) -> List[str]:
+    def get_available_models(self) -> list[str]:
         """List of registry keys admins can choose from."""
         return list(self.MODEL_REGISTRY.keys())
 
-    def get_model_info(self, key: str) -> Optional[Dict[str, Any]]:
+    def get_model_info(self, key: str) -> dict[str, Any] | None:
         return self.MODEL_REGISTRY.get(key)
 
-    def resolve_model_name(self, key_or_name: Optional[str]) -> str:
+    def resolve_model_name(self, key_or_name: str | None) -> str:
         """
         Accepts a registry key (preferred) or a raw API name.
         Returns the API model name to send to the provider.
@@ -214,20 +306,18 @@ class AIService:
         self._prune_old(ev["week"], 7 * 86400)
 
         # enforce caps
-        if len(ev["hour"]) >= self.user_limits["per_hour"] \
-           or len(ev["day"]) >= self.user_limits["per_day"] \
-           or len(ev["week"]) >= self.user_limits["per_week"]:
-            return False, {
-                "hour": len(ev["hour"]), "day": len(ev["day"]), "week": len(ev["week"])
-            }
+        if (
+            len(ev["hour"]) >= self.user_limits["per_hour"]
+            or len(ev["day"]) >= self.user_limits["per_day"]
+            or len(ev["week"]) >= self.user_limits["per_week"]
+        ):
+            return False, {"hour": len(ev["hour"]), "day": len(ev["day"]), "week": len(ev["week"])}
 
         # count this call
         ev["hour"].append(now)
         ev["day"].append(now)
         ev["week"].append(now)
-        return True, {
-            "hour": len(ev["hour"]), "day": len(ev["day"]), "week": len(ev["week"])
-        }
+        return True, {"hour": len(ev["hour"]), "day": len(ev["day"]), "week": len(ev["week"])}
 
     async def get_user_limit_snapshot(self, user_id: str) -> dict:
         ev = self.user_events.get(user_id, {"hour": deque(), "day": deque(), "week": deque()})
@@ -238,12 +328,17 @@ class AIService:
             async with aiohttp.ClientSession() as session:
                 async with session.get(
                     f"{self.groq_base_url}/models",
-                    headers={"Authorization": f"Bearer {self.groq_api_key}", "Content-Type": "application/json"},
+                    headers={
+                        "Authorization": f"Bearer {self.groq_api_key}",
+                        "Content-Type": "application/json",
+                    },
                 ) as r:
                     data = await r.json()
                     self.supported_api_models = {m["id"] for m in data.get("data", [])}
-                    logger.info(f"[AI] Groq account can use {len(self.supported_api_models)} models.")
-                    
+                    logger.info(
+                        f"[AI] Groq account can use {len(self.supported_api_models)} models."
+                    )
+
                     if self.embed_logger:
                         await self.embed_logger.log_custom(
                             service="AI Service",
@@ -253,20 +348,20 @@ class AIService:
                             fields={
                                 "Available Models": str(len(self.supported_api_models)),
                                 "API Endpoint": f"{self.groq_base_url}/models",
-                                "Status": "✅ Connected"
-                            }
+                                "Status": "✅ Connected",
+                            },
                         )
-                        
+
         except Exception as e:
             logger.warning(f"[AI] Could not refresh supported models: {e}")
             if self.embed_logger:
                 await self.embed_logger.log_error(
                     service="AI Service",
                     error=e,
-                    context="Failed to refresh supported models from Groq API"
+                    context="Failed to refresh supported models from Groq API",
                 )
 
-    async def setup(self, embed_logger: Optional[EmbedLogger] = None):
+    async def setup(self, embed_logger: EmbedLogger | None = None):
         """Initialize AI service"""
         self.embed_logger = embed_logger
 
@@ -290,36 +385,38 @@ class AIService:
                 level=LogLevel.SUCCESS,
                 fields=[
                     ("API Provider", "Groq", True),
-                    ("Default Model", f"{self.MODEL_REGISTRY[self.default_model]['display']}", True),
+                    (
+                        "Default Model",
+                        f"{self.MODEL_REGISTRY[self.default_model]['display']}",
+                        True,
+                    ),
                     ("API Model", f"`{self.MODEL_REGISTRY[self.default_model]['api_name']}`", True),
                     ("Rate Limit", f"{self.requests_per_minute} req/min", True),
                     ("Available Models", f"{len(self.MODEL_REGISTRY)} registered", True),
                     ("Status", "🟢 Ready", True),
                 ],
             )
-        
+
         # Refresh supported models from Groq
         await self.refresh_supported_models()
         logger.info("AI service initialized with Groq API")
 
     async def generate_response(
         self,
-        messages: List[Dict[str, str]],
-        model: Optional[str] = None,
+        messages: list[dict[str, str]],
+        model: str | None = None,
         max_tokens: int = 1000,
         temperature: float = 0.7,
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
         *,
         respect_input_language: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Generate AI response using Groq API"""
         if not self.groq_api_key:
             error = Exception("Groq API key not configured")
             if self.embed_logger:
                 await self.embed_logger.log_error(
-                    service="AI Service",
-                    error=error,
-                    context="Generate response - API key missing"
+                    service="AI Service", error=error, context="Generate response - API key missing"
                 )
             raise error
 
@@ -333,13 +430,13 @@ class AIService:
                     fields={
                         "Rate Limit": f"{self.requests_per_minute} req/min",
                         "Recent Requests": str(len(self.requests_made)),
-                        "Action": "Request blocked"
-                    }
+                        "Action": "Request blocked",
+                    },
                 )
             raise error
 
         # Build messages
-        api_messages: List[Dict[str, str]] = []
+        api_messages: list[dict[str, str]] = []
         if system_prompt:
             api_messages.append({"role": "system", "content": system_prompt})
         if respect_input_language:
@@ -399,7 +496,7 @@ class AIService:
                             await self.embed_logger.log_error(
                                 service="AI Service",
                                 error=error,
-                                context=f"API request failed - Status: {response.status}, Model: {api_model}"
+                                context=f"API request failed - Status: {response.status}, Model: {api_model}",
                             )
                         raise error
 
@@ -412,7 +509,7 @@ class AIService:
                             await self.embed_logger.log_error(
                                 service="AI Service",
                                 error=error,
-                                context=f"Empty response from API - Model: {api_model}"
+                                context=f"Empty response from API - Model: {api_model}",
                             )
                         raise error
 
@@ -454,20 +551,19 @@ class AIService:
                 await self.embed_logger.log_error(
                     service="AI Service",
                     error=e,
-                    context=f"Failed to generate response - Model: {api_model}, Temperature: {temperature}"
+                    context=f"Failed to generate response - Model: {api_model}, Temperature: {temperature}",
                 )
             raise
-
 
     async def quick_prompt(
         self,
         prompt: str,
-        system_prompt: Optional[str] = None,
+        system_prompt: str | None = None,
         max_tokens: int = 500,
         temperature: float = 0.7,
         *,
         respect_input_language: bool = True,
-        model: Optional[str] = None,
+        model: str | None = None,
     ) -> str:
         """Quick single prompt to AI"""
         messages = [{"role": "user", "content": prompt}]
@@ -481,7 +577,7 @@ class AIService:
         )
         return result["content"]
 
-    async def moderate_content(self, content: str) -> Dict[str, Any]:
+    async def moderate_content(self, content: str) -> dict[str, Any]:
         """Moderate content for inappropriate material — forces Llama Guard 4"""
         system_prompt = """You are a content moderator for a Discord server. 
 Analyze the given text and determine if it contains:
@@ -509,7 +605,7 @@ Respond with JSON format:
             )
             try:
                 result = json.loads(response)
-                
+
                 if self.embed_logger and not result.get("is_appropriate", True):
                     await self.embed_logger.log_custom(
                         service="AI Moderation",
@@ -519,17 +615,17 @@ Respond with JSON format:
                         fields={
                             "Severity": result.get("severity", "unknown"),
                             "Violations": ", ".join(result.get("violations", [])),
-                            "Reason": result.get("reason", "No reason provided")[:100]
-                        }
+                            "Reason": result.get("reason", "No reason provided")[:100],
+                        },
                     )
-                
+
                 return result
             except json.JSONDecodeError:
                 if self.embed_logger:
                     await self.embed_logger.log_error(
                         service="AI Moderation",
                         error=Exception("Failed to parse moderation JSON response"),
-                        context=f"Response: {response[:200]}"
+                        context=f"Response: {response[:200]}",
                     )
                 return {
                     "is_appropriate": True,
@@ -541,9 +637,7 @@ Respond with JSON format:
             logger.error(f"Content moderation failed: {e}")
             if self.embed_logger:
                 await self.embed_logger.log_error(
-                    service="AI Moderation",
-                    error=e,
-                    context="Content moderation request failed"
+                    service="AI Moderation", error=e, context="Content moderation request failed"
                 )
             return {
                 "is_appropriate": True,
@@ -556,7 +650,7 @@ Respond with JSON format:
         """Translate text to target language"""
         system_prompt = f"""You are a translator. Translate the given text to {target_language}. 
 Only respond with the translation, no explanations."""
-        
+
         try:
             result = await self.quick_prompt(
                 prompt=text,
@@ -565,7 +659,7 @@ Only respond with the translation, no explanations."""
                 temperature=0.3,
                 respect_input_language=False,  # translating should not mirror original language
             )
-            
+
             if self.embed_logger:
                 await self.embed_logger.log_custom(
                     service="AI Translation",
@@ -575,17 +669,17 @@ Only respond with the translation, no explanations."""
                     fields={
                         "Target Language": target_language,
                         "Original Length": f"{len(text)} chars",
-                        "Translated Length": f"{len(result)} chars"
-                    }
+                        "Translated Length": f"{len(result)} chars",
+                    },
                 )
-            
+
             return result
         except Exception as e:
             if self.embed_logger:
                 await self.embed_logger.log_error(
                     service="AI Translation",
                     error=e,
-                    context=f"Translation to {target_language} failed"
+                    context=f"Translation to {target_language} failed",
                 )
             raise
 
@@ -614,16 +708,17 @@ Provide 3-5 actionable suggestions."""
             temperature=0.7,
             respect_input_language=True,
         )
+
     async def generate_chat_reply(
         self,
         user_message: str,
-        conversation_context: Optional[List[str]] = None,
+        conversation_context: list[str] | None = None,
         *,
         temperature: float = 0.6,
         max_tokens: int = 350,
-        model: Optional[str] = None,   # use current default chat model unless overridden
+        model: str | None = None,  # use current default chat model unless overridden
         funny: bool = True,
-        persona: Optional[Dict[str, str]] = None,
+        persona: dict[str, str] | None = None,
     ) -> str:
         """
         Generate a short, helpful public reply for a Discord mention.
@@ -645,7 +740,7 @@ Provide 3-5 actionable suggestions."""
                 system_prompt += "\nPersona style: " + chosen_persona["style"]
 
         # Build messages
-        msgs: List[Dict[str, str]] = []
+        msgs: list[dict[str, str]] = []
         if conversation_context:
             ctx = "Recent context:\n" + "\n".join(conversation_context[-6:])
             msgs.append({"role": "system", "content": ctx})
@@ -662,21 +757,19 @@ Provide 3-5 actionable suggestions."""
         # IMPORTANT: no persona label or prefix added here
         return result["content"]
 
-
-    
-    async def set_default_model(self, model_key: str, actor_id: Optional[str] = None) -> bool:
+    async def set_default_model(self, model_key: str, actor_id: str | None = None) -> bool:
         """Set default model and log the change"""
         old_key = self.default_model
         old_info = self.get_model_info(old_key)
         old_api = old_info["api_name"] if old_info else self.resolve_model_name(old_key)
-        
+
         # Validate model exists in registry or allow raw API names
         new_info = self.get_model_info(model_key)
         new_api = new_info["api_name"] if new_info else model_key
-        
+
         # Set the new model
         self.default_model = model_key
-        
+
         if self.embed_logger:
             await self.embed_logger.log_custom(
                 service="AI Configuration",
@@ -689,23 +782,22 @@ Provide 3-5 actionable suggestions."""
                     "New Model": f"{new_info['display'] if new_info else model_key}",
                     "New API": f"`{new_api}`",
                     "Changed By": f"<@{actor_id}>" if actor_id else "System",
-                    "Registry Status": "✅ Registered" if new_info else "⚠️ Raw API Name"
-                }
+                    "Registry Status": "✅ Registered" if new_info else "⚠️ Raw API Name",
+                },
             )
-            
-        logger.info(f"Default AI model changed from {old_key} to {model_key} by {actor_id or 'system'}")
+
+        logger.info(
+            f"Default AI model changed from {old_key} to {model_key} by {actor_id or 'system'}"
+        )
         return True
 
     async def _check_rate_limit(self) -> bool:
         """Check if we're within rate limits"""
         now = datetime.utcnow()
-        self.requests_made = [
-            t for t in self.requests_made
-            if (now - t).total_seconds() < 60
-        ]
+        self.requests_made = [t for t in self.requests_made if (now - t).total_seconds() < 60]
         return len(self.requests_made) < self.requests_per_minute
 
-    async def get_usage_stats(self) -> Dict[str, Any]:
+    async def get_usage_stats(self) -> dict[str, Any]:
         """Get service usage statistics"""
         recent_requests = len(
             [t for t in self.requests_made if (datetime.utcnow() - t).total_seconds() < 3600]

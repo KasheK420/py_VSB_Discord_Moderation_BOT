@@ -1,34 +1,43 @@
 # bot/cogs/ai.py
 import logging
+
 import discord
+from discord import Interaction, app_commands
 from discord.ext import commands
-from discord import app_commands, Interaction
-from typing import Optional, List
 
 from bot.utils.ai_helper import (
     ask_ai,
-    translate_message,
     explain_concept,
+    get_ai_config,
+    get_ai_model_registry,
+    get_ai_service,
     improve_text,
+    set_ai_default_model,
     smart_reply,
+    translate_message,
 )
-from bot.utils.ai_helper import get_ai_service, get_ai_config, set_ai_default_model, get_ai_model_registry
+
 from ..services.logging_service import LogLevel
 
 logger = logging.getLogger(__name__)
+
 
 class AICog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         # just define them here; don't add to tree yet
         self.ctx_reply = app_commands.ContextMenu(name="AI: Reply", callback=self._ctx_ai_reply)
-        self.ctx_reply_post = app_commands.ContextMenu(name="AI: Reply (post)", callback=self._ctx_ai_reply_post)
-        self.ctx_summarize = app_commands.ContextMenu(name="AI: Summarize", callback=self._ctx_ai_summarize)
+        self.ctx_reply_post = app_commands.ContextMenu(
+            name="AI: Reply (post)", callback=self._ctx_ai_reply_post
+        )
+        self.ctx_summarize = app_commands.ContextMenu(
+            name="AI: Summarize", callback=self._ctx_ai_summarize
+        )
 
     @property
     def embed_logger(self):
         """Get embed logger from bot"""
-        return getattr(self.bot, 'embed_logger', None)
+        return getattr(self.bot, "embed_logger", None)
 
     async def cog_load(self):
         """Called by discord.py when the cog is fully loaded."""
@@ -70,8 +79,8 @@ class AICog(commands.Cog):
                         "Command": "AI: Reply (post)",
                         "User": f"<@{interaction.user.id}>",
                         "Target Message": f"{message.id}",
-                        "Reason": "Missing Manage Messages permission"
-                    }
+                        "Reason": "Missing Manage Messages permission",
+                    },
                 )
             return await interaction.response.send_message(
                 "❌ You need **Manage Messages** to use this.", ephemeral=True
@@ -93,16 +102,15 @@ class AICog(commands.Cog):
                         "Hour": f"{counters['hour']}/{ai_service.user_limits['per_hour']}",
                         "Day": f"{counters['day']}/{ai_service.user_limits['per_day']}",
                         "Week": f"{counters['week']}/{ai_service.user_limits['per_week']}",
-                        "Command": "AI: Reply (post)"
-                    }
+                        "Command": "AI: Reply (post)",
+                    },
                 )
             return await interaction.followup.send(
-                "⏳ You’ve reached your AI usage limit. Please try again later.",
-                ephemeral=True
+                "⏳ You’ve reached your AI usage limit. Please try again later.", ephemeral=True
             )
 
         # Build minimal conversation context (last few human messages before the target)
-        history: List[str] = []
+        history: list[str] = []
         try:
             async for m in message.channel.history(limit=5, before=message, oldest_first=False):
                 if m.author.bot:
@@ -117,9 +125,9 @@ class AICog(commands.Cog):
             reply_text = await smart_reply(
                 user_message=message.content,
                 conversation_context=convo,
-                bot_personality="helpful moderator bot"
+                bot_personality="helpful moderator bot",
             )
-            
+
             if self.embed_logger:
                 await self.embed_logger.log_custom(
                     service="AI Commands",
@@ -131,16 +139,16 @@ class AICog(commands.Cog):
                         "Executed By": f"<@{interaction.user.id}>",
                         "Target Message": f"By {message.author.mention} in {message.channel.mention}",
                         "Reply Length": f"{len(reply_text)} chars",
-                        "Status": "✅ Posted publicly"
-                    }
+                        "Status": "✅ Posted publicly",
+                    },
                 )
-                
+
         except Exception as e:
             if self.embed_logger:
                 await self.embed_logger.log_error(
                     service="AI Commands",
                     error=e,
-                    context=f"AI public reply failed - user: {interaction.user.id}, target: {message.id}"
+                    context=f"AI public reply failed - user: {interaction.user.id}, target: {message.id}",
                 )
             return await interaction.followup.send(f"❌ AI failed: {e}", ephemeral=True)
 
@@ -159,24 +167,26 @@ class AICog(commands.Cog):
                 await self.embed_logger.log_error(
                     service="AI Commands",
                     error=Exception("Permission denied - cannot send messages"),
-                    context=f"AI reply post failed - user: {interaction.user.id}, channel: {message.channel.id}"
+                    context=f"AI reply post failed - user: {interaction.user.id}, channel: {message.channel.id}",
                 )
-            await interaction.followup.send("❌ I lack permission to send messages here.", ephemeral=True)
+            await interaction.followup.send(
+                "❌ I lack permission to send messages here.", ephemeral=True
+            )
         except Exception as e:
             if self.embed_logger:
                 await self.embed_logger.log_error(
                     service="AI Commands",
                     error=e,
-                    context=f"AI reply post failed - user: {interaction.user.id}, channel: {message.channel.id}"
+                    context=f"AI reply post failed - user: {interaction.user.id}, channel: {message.channel.id}",
                 )
             await interaction.followup.send(f"❌ Failed to post: {e}", ephemeral=True)
-            
+
     @app_commands.command(name="ai_ask", description="Ask the AI anything (short helpful answer).")
     @app_commands.describe(
         prompt="What do you want to ask?",
-        public="Post the answer publicly in the channel (default: off/ephemeral)."
+        public="Post the answer publicly in the channel (default: off/ephemeral).",
     )
-    async def ai_ask(self, interaction: Interaction, prompt: str, public: Optional[bool] = False):
+    async def ai_ask(self, interaction: Interaction, prompt: str, public: bool | None = False):
         await interaction.response.defer(ephemeral=not public)
 
         # --- USAGE LIMIT GUARD ---
@@ -193,17 +203,19 @@ class AICog(commands.Cog):
                         "Hour": f"{counters['hour']}/{ai_service.user_limits['per_hour']}",
                         "Day": f"{counters['day']}/{ai_service.user_limits['per_day']}",
                         "Week": f"{counters['week']}/{ai_service.user_limits['per_week']}",
-                        "Command": "/ai_ask"
-                    }
+                        "Command": "/ai_ask",
+                    },
                 )
             return await interaction.followup.send(
                 "⏳ You’ve reached your AI usage limit. Please try again later.",
-                ephemeral=not public
+                ephemeral=not public,
             )
-        
+
         try:
-            answer = await ask_ai(prompt=prompt, system_context="You are a helpful Discord assistant.", max_length=350)
-            
+            answer = await ask_ai(
+                prompt=prompt, system_context="You are a helpful Discord assistant.", max_length=350
+            )
+
             if self.embed_logger:
                 await self.embed_logger.log_custom(
                     service="AI Commands",
@@ -216,10 +228,10 @@ class AICog(commands.Cog):
                         "Question Length": f"{len(prompt)} chars",
                         "Answer Length": f"{len(answer)} chars",
                         "Visibility": "Public" if public else "Private",
-                        "Status": "✅ Success"
-                    }
+                        "Status": "✅ Success",
+                    },
                 )
-                
+
             await interaction.followup.send(answer[:1900], ephemeral=not public)
         except Exception as e:
             logger.exception("ai_ask failed")
@@ -227,7 +239,7 @@ class AICog(commands.Cog):
                 await self.embed_logger.log_error(
                     service="AI Commands",
                     error=e,
-                    context=f"ai_ask failed - user: {interaction.user.id}, prompt: {prompt[:100]}..."
+                    context=f"ai_ask failed - user: {interaction.user.id}, prompt: {prompt[:100]}...",
                 )
             await interaction.followup.send(f"❌ AI failed: {e}", ephemeral=True)
 
@@ -235,9 +247,11 @@ class AICog(commands.Cog):
     @app_commands.describe(
         text="Text to translate",
         to_language="Target language (e.g. 'english', 'czech', 'polish')",
-        public="Post the translation publicly (default: off/ephemeral)."
+        public="Post the translation publicly (default: off/ephemeral).",
     )
-    async def ai_translate(self, interaction: Interaction, text: str, to_language: str, public: Optional[bool] = False):
+    async def ai_translate(
+        self, interaction: Interaction, text: str, to_language: str, public: bool | None = False
+    ):
         await interaction.response.defer(ephemeral=not public)
 
         # --- USAGE LIMIT GUARD ---
@@ -254,17 +268,17 @@ class AICog(commands.Cog):
                         "Hour": f"{counters['hour']}/{ai_service.user_limits['per_hour']}",
                         "Day": f"{counters['day']}/{ai_service.user_limits['per_day']}",
                         "Week": f"{counters['week']}/{ai_service.user_limits['per_week']}",
-                        "Command": "/ai_translate"
-                    }
+                        "Command": "/ai_translate",
+                    },
                 )
             return await interaction.followup.send(
                 "⏳ You’ve reached your AI usage limit. Please try again later.",
-                ephemeral=not public
+                ephemeral=not public,
             )
 
         try:
             result = await translate_message(text, to_language)
-            
+
             if self.embed_logger:
                 await self.embed_logger.log_custom(
                     service="AI Commands",
@@ -278,10 +292,10 @@ class AICog(commands.Cog):
                         "Original Length": f"{len(text)} chars",
                         "Translated Length": f"{len(result)} chars",
                         "Visibility": "Public" if public else "Private",
-                        "Status": "✅ Success"
-                    }
+                        "Status": "✅ Success",
+                    },
                 )
-                
+
             await interaction.followup.send(result[:1900], ephemeral=not public)
         except Exception as e:
             logger.exception("ai_translate failed")
@@ -289,7 +303,7 @@ class AICog(commands.Cog):
                 await self.embed_logger.log_error(
                     service="AI Commands",
                     error=e,
-                    context=f"ai_translate failed - user: {interaction.user.id}, language: {to_language}"
+                    context=f"ai_translate failed - user: {interaction.user.id}, language: {to_language}",
                 )
             await interaction.followup.send(f"❌ Translation failed: {e}", ephemeral=True)
 
@@ -297,9 +311,15 @@ class AICog(commands.Cog):
     @app_commands.describe(
         concept="What should be explained?",
         context="Optional extra context (e.g. 'for first-year CS student')",
-        public="Post publicly (default: off/ephemeral)."
+        public="Post publicly (default: off/ephemeral).",
     )
-    async def ai_explain(self, interaction: Interaction, concept: str, context: Optional[str] = "Discord server", public: Optional[bool] = False):
+    async def ai_explain(
+        self,
+        interaction: Interaction,
+        concept: str,
+        context: str | None = "Discord server",
+        public: bool | None = False,
+    ):
         await interaction.response.defer(ephemeral=not public)
 
         # --- USAGE LIMIT GUARD ---
@@ -316,17 +336,17 @@ class AICog(commands.Cog):
                         "Hour": f"{counters['hour']}/{ai_service.user_limits['per_hour']}",
                         "Day": f"{counters['day']}/{ai_service.user_limits['per_day']}",
                         "Week": f"{counters['week']}/{ai_service.user_limits['per_week']}",
-                        "Command": "/ai_explain"
-                    }
+                        "Command": "/ai_explain",
+                    },
                 )
             return await interaction.followup.send(
                 "⏳ You’ve reached your AI usage limit. Please try again later.",
-                ephemeral=not public
+                ephemeral=not public,
             )
 
         try:
             result = await explain_concept(concept, context=context or "Discord server")
-            
+
             if self.embed_logger:
                 await self.embed_logger.log_custom(
                     service="AI Commands",
@@ -340,10 +360,10 @@ class AICog(commands.Cog):
                         "Context": context or "Discord server",
                         "Explanation Length": f"{len(result)} chars",
                         "Visibility": "Public" if public else "Private",
-                        "Status": "✅ Success"
-                    }
+                        "Status": "✅ Success",
+                    },
                 )
-                
+
             await interaction.followup.send(result[:1900], ephemeral=not public)
         except Exception as e:
             logger.exception("ai_explain failed")
@@ -351,7 +371,7 @@ class AICog(commands.Cog):
                 await self.embed_logger.log_error(
                     service="AI Commands",
                     error=e,
-                    context=f"ai_explain failed - user: {interaction.user.id}, concept: {concept[:50]}..."
+                    context=f"ai_explain failed - user: {interaction.user.id}, concept: {concept[:50]}...",
                 )
             await interaction.followup.send(f"❌ Explain failed: {e}", ephemeral=True)
 
@@ -359,9 +379,15 @@ class AICog(commands.Cog):
     @app_commands.describe(
         text="Original text to improve",
         instruction="e.g. 'make it clearer and more professional'",
-        public="Post publicly (default: off/ephemeral)."
+        public="Post publicly (default: off/ephemeral).",
     )
-    async def ai_improve(self, interaction: Interaction, text: str, instruction: Optional[str] = "make it clearer and more professional", public: Optional[bool] = False):
+    async def ai_improve(
+        self,
+        interaction: Interaction,
+        text: str,
+        instruction: str | None = "make it clearer and more professional",
+        public: bool | None = False,
+    ):
         await interaction.response.defer(ephemeral=not public)
 
         # --- USAGE LIMIT GUARD ---
@@ -378,17 +404,19 @@ class AICog(commands.Cog):
                         "Hour": f"{counters['hour']}/{ai_service.user_limits['per_hour']}",
                         "Day": f"{counters['day']}/{ai_service.user_limits['per_day']}",
                         "Week": f"{counters['week']}/{ai_service.user_limits['per_week']}",
-                        "Command": "/ai_improve"
-                    }
+                        "Command": "/ai_improve",
+                    },
                 )
             return await interaction.followup.send(
                 "⏳ You’ve reached your AI usage limit. Please try again later.",
-                ephemeral=not public
+                ephemeral=not public,
             )
 
         try:
-            result = await improve_text(text, instruction=instruction or "make it clearer and more professional")
-            
+            result = await improve_text(
+                text, instruction=instruction or "make it clearer and more professional"
+            )
+
             if self.embed_logger:
                 await self.embed_logger.log_custom(
                     service="AI Commands",
@@ -402,10 +430,10 @@ class AICog(commands.Cog):
                         "Improved Length": f"{len(result)} chars",
                         "Instruction": instruction or "make it clearer and more professional",
                         "Visibility": "Public" if public else "Private",
-                        "Status": "✅ Success"
-                    }
+                        "Status": "✅ Success",
+                    },
                 )
-                
+
             await interaction.followup.send(result[:1900], ephemeral=not public)
         except Exception as e:
             logger.exception("ai_improve failed")
@@ -413,7 +441,7 @@ class AICog(commands.Cog):
                 await self.embed_logger.log_error(
                     service="AI Commands",
                     error=e,
-                    context=f"ai_improve failed - user: {interaction.user.id}, text length: {len(text)}"
+                    context=f"ai_improve failed - user: {interaction.user.id}, text length: {len(text)}",
                 )
             await interaction.followup.send(f"❌ Improve failed: {e}", ephemeral=True)
 
@@ -436,17 +464,16 @@ class AICog(commands.Cog):
                         "Hour": f"{counters['hour']}/{ai_service.user_limits['per_hour']}",
                         "Day": f"{counters['day']}/{ai_service.user_limits['per_day']}",
                         "Week": f"{counters['week']}/{ai_service.user_limits['per_week']}",
-                        "Command": "AI: Reply"
-                    }
+                        "Command": "AI: Reply",
+                    },
                 )
             return await interaction.followup.send(
-                "⏳ You’ve reached your AI usage limit. Please try again later.",
-                ephemeral=True
+                "⏳ You’ve reached your AI usage limit. Please try again later.", ephemeral=True
             )
 
         try:
             # Pull a bit of context (last 4 messages before the target)
-            history: List[str] = []
+            history: list[str] = []
             try:
                 async for m in message.channel.history(limit=5, before=message, oldest_first=False):
                     if m.author.bot:
@@ -459,9 +486,9 @@ class AICog(commands.Cog):
             reply = await smart_reply(
                 user_message=message.content,
                 conversation_context=convo,
-                bot_personality="helpful moderator bot"
+                bot_personality="helpful moderator bot",
             )
-            
+
             if self.embed_logger:
                 await self.embed_logger.log_custom(
                     service="AI Commands",
@@ -473,10 +500,10 @@ class AICog(commands.Cog):
                         "User": f"<@{interaction.user.id}>",
                         "Target Message": f"By {message.author.mention} in {message.channel.mention}",
                         "Reply Length": f"{len(reply)} chars",
-                        "Status": "✅ Draft generated"
-                    }
+                        "Status": "✅ Draft generated",
+                    },
                 )
-            
+
             # Show and also offer to post it
             btn = discord.ui.Button(label="Post to channel", style=discord.ButtonStyle.primary)
             view = discord.ui.View(timeout=30)
@@ -484,8 +511,10 @@ class AICog(commands.Cog):
 
             async def _post_callback(i: Interaction):
                 if i.user.id != interaction.user.id:
-                    return await i.response.send_message("❌ Only the requester can post this.", ephemeral=True)
-                
+                    return await i.response.send_message(
+                        "❌ Only the requester can post this.", ephemeral=True
+                    )
+
                 if self.embed_logger:
                     await self.embed_logger.log_custom(
                         service="AI Commands",
@@ -496,21 +525,25 @@ class AICog(commands.Cog):
                             "Original Command": "AI: Reply",
                             "User": f"<@{interaction.user.id}>",
                             "Action": "Posted via button",
-                            "Reply Length": f"{len(reply)} chars"
-                        }
+                            "Reply Length": f"{len(reply)} chars",
+                        },
                     )
-                    
-                await i.response.send_message(f"↪️ Replying to {message.author.mention}:\n{reply}", ephemeral=False)
+
+                await i.response.send_message(
+                    f"↪️ Replying to {message.author.mention}:\n{reply}", ephemeral=False
+                )
 
             btn.callback = _post_callback  # type: ignore
-            await interaction.followup.send(f"**AI reply draft (ephemeral):**\n{reply}", view=view, ephemeral=True)
+            await interaction.followup.send(
+                f"**AI reply draft (ephemeral):**\n{reply}", view=view, ephemeral=True
+            )
         except Exception as e:
             logger.exception("ctx_ai_reply failed")
             if self.embed_logger:
                 await self.embed_logger.log_error(
                     service="AI Commands",
                     error=e,
-                    context=f"ctx_ai_reply failed - user: {interaction.user.id}, message: {message.id}"
+                    context=f"ctx_ai_reply failed - user: {interaction.user.id}, message: {message.id}",
                 )
             await interaction.followup.send(f"❌ AI reply failed: {e}", ephemeral=True)
 
@@ -532,12 +565,11 @@ class AICog(commands.Cog):
                         "Hour": f"{counters['hour']}/{ai_service.user_limits['per_hour']}",
                         "Day": f"{counters['day']}/{ai_service.user_limits['per_day']}",
                         "Week": f"{counters['week']}/{ai_service.user_limits['per_week']}",
-                        "Command": "AI: Summarize"
-                    }
+                        "Command": "AI: Summarize",
+                    },
                 )
             return await interaction.followup.send(
-                "⏳ You’ve reached your AI usage limit. Please try again later.",
-                ephemeral=True
+                "⏳ You’ve reached your AI usage limit. Please try again later.", ephemeral=True
             )
 
         try:
@@ -546,8 +578,13 @@ class AICog(commands.Cog):
                 "Be neutral, factual, and concise.\n\n"
                 f"Message by {message.author.display_name}:\n```{message.content[:1800]}```"
             )
-            summary = await ask_ai(prompt=prompt, system_context="You are a concise summarizer.", max_length=160, creativity=0.2)
-            
+            summary = await ask_ai(
+                prompt=prompt,
+                system_context="You are a concise summarizer.",
+                max_length=160,
+                creativity=0.2,
+            )
+
             if self.embed_logger:
                 await self.embed_logger.log_custom(
                     service="AI Commands",
@@ -560,10 +597,10 @@ class AICog(commands.Cog):
                         "Target Message": f"By {message.author.mention} in {message.channel.mention}",
                         "Original Length": f"{len(message.content)} chars",
                         "Summary Length": f"{len(summary)} chars",
-                        "Status": "✅ Success"
-                    }
+                        "Status": "✅ Success",
+                    },
                 )
-                
+
             await interaction.followup.send(f"**Summary:** {summary}", ephemeral=True)
         except Exception as e:
             logger.exception("ctx_ai_summarize failed")
@@ -571,7 +608,7 @@ class AICog(commands.Cog):
                 await self.embed_logger.log_error(
                     service="AI Commands",
                     error=e,
-                    context=f"ctx_ai_summarize failed - user: {interaction.user.id}, message: {message.id}"
+                    context=f"ctx_ai_summarize failed - user: {interaction.user.id}, message: {message.id}",
                 )
             await interaction.followup.send(f"❌ AI summarize failed: {e}", ephemeral=True)
 
@@ -631,7 +668,7 @@ class AICog(commands.Cog):
                             "Day": f"{counters['day']}/{ai_service.user_limits['per_day']}",
                             "Week": f"{counters['week']}/{ai_service.user_limits['per_week']}",
                             "Channel": f"{message.channel.mention}",
-                        }
+                        },
                     )
                 return
 
@@ -682,7 +719,7 @@ class AICog(commands.Cog):
                     await self.embed_logger.log_error(
                         service="AI Commands",
                         error=e,
-                        context=f"Mention reply generation failed in #{message.channel.id}"
+                        context=f"Mention reply generation failed in #{message.channel.id}",
                     )
                 return
 
@@ -708,50 +745,58 @@ class AICog(commands.Cog):
                             "Mode": persona_label,
                             "Reply Length": f"{len(reply_text)}",
                             "User": f"<@{message.author.id}>",
-                        }
+                        },
                     )
             except discord.Forbidden as e:
                 if self.embed_logger:
                     await self.embed_logger.log_error(
                         service="AI Commands",
                         error=e,
-                        context=f"Permission error sending mention reply in #{message.channel.id}"
+                        context=f"Permission error sending mention reply in #{message.channel.id}",
                     )
             except Exception as e:
                 if self.embed_logger:
                     await self.embed_logger.log_error(
                         service="AI Commands",
                         error=e,
-                        context=f"Failed to send mention reply in #{message.channel.id}"
+                        context=f"Failed to send mention reply in #{message.channel.id}",
                     )
         except Exception as e:
             logger.exception("Unhandled error in on_message mention handler: %s", e)
 
-
-
     # Nice error handling
     @commands.Cog.listener()
-    async def on_app_command_error(self, interaction: Interaction, error: app_commands.AppCommandError):
+    async def on_app_command_error(
+        self, interaction: Interaction, error: app_commands.AppCommandError
+    ):
         from discord.app_commands import errors
-        
+
         if self.embed_logger:
             await self.embed_logger.log_error(
                 service="AI Commands",
                 error=error,
-                context=f"AI command error - User: {interaction.user.id}, Command: {getattr(interaction.command, 'name', 'unknown')}"
+                context=f"AI command error - User: {interaction.user.id}, Command: {getattr(interaction.command, 'name', 'unknown')}",
             )
-        
+
         try:
             if isinstance(error, errors.CommandOnCooldown):
-                await interaction.response.send_message("⏳ Hold up, that command is on cooldown.", ephemeral=True)
+                await interaction.response.send_message(
+                    "⏳ Hold up, that command is on cooldown.", ephemeral=True
+                )
             elif isinstance(error, errors.MissingPermissions):
-                await interaction.response.send_message("❌ You don't have permission to use this.", ephemeral=True)
+                await interaction.response.send_message(
+                    "❌ You don't have permission to use this.", ephemeral=True
+                )
             else:
                 logger.exception("AI Cog command error")
                 if interaction.response.is_done():
-                    await interaction.followup.send("❌ Command failed unexpectedly.", ephemeral=True)
+                    await interaction.followup.send(
+                        "❌ Command failed unexpectedly.", ephemeral=True
+                    )
                 else:
-                    await interaction.response.send_message("❌ Command failed unexpectedly.", ephemeral=True)
+                    await interaction.response.send_message(
+                        "❌ Command failed unexpectedly.", ephemeral=True
+                    )
         except Exception:
             pass
 
@@ -766,9 +811,11 @@ class AICog(commands.Cog):
                 await self.embed_logger.log_error(
                     service="AI Commands",
                     error=Exception("AI service not initialized"),
-                    context=f"ai_config command by {interaction.user.id}"
+                    context=f"ai_config command by {interaction.user.id}",
                 )
-            return await interaction.followup.send("❌ AI service is not initialized.", ephemeral=True)
+            return await interaction.followup.send(
+                "❌ AI service is not initialized.", ephemeral=True
+            )
 
         if self.embed_logger:
             await self.embed_logger.log_custom(
@@ -780,8 +827,8 @@ class AICog(commands.Cog):
                     "Command": "/ai_config",
                     "Executed By": f"<@{interaction.user.id}>",
                     "Models Available": str(len(cfg.get("available_models", []))),
-                    "Current Model": cfg.get("default_model_display", "unknown")
-                }
+                    "Current Model": cfg.get("default_model_display", "unknown"),
+                },
             )
 
         # Header embed (no huge fields)
@@ -791,13 +838,9 @@ class AICog(commands.Cog):
         header.add_field(
             name="Default Model",
             value=f"{cfg['default_model_display']}\n`{cfg['default_model_api']}`",
-            inline=False
+            inline=False,
         )
-        header.add_field(
-            name="Moderation Model",
-            value="llama-3-1-8b-128k (forced)",
-            inline=False
-        )
+        header.add_field(name="Moderation Model", value="llama-3-1-8b-128k (forced)", inline=False)
         header.add_field(name="Rate Limit", value=f"{cfg['rate_limit_rpm']} req/min", inline=True)
         header.add_field(name="Base URL", value=f"`{cfg['base_url']}`", inline=False)
 
@@ -836,7 +879,7 @@ class AICog(commands.Cog):
             em = discord.Embed(
                 title=f"Models ({i}/{len(model_chunks)})",
                 description=chunk,
-                color=discord.Color.blurple()
+                color=discord.Color.blurple(),
             )
             embeds.append(em)
 
@@ -844,7 +887,7 @@ class AICog(commands.Cog):
         MAX_EMBEDS_PER_MESSAGE = 10
         sent_first = False
         for i in range(0, len(embeds), MAX_EMBEDS_PER_MESSAGE):
-            batch = embeds[i:i + MAX_EMBEDS_PER_MESSAGE]
+            batch = embeds[i : i + MAX_EMBEDS_PER_MESSAGE]
             if not sent_first:
                 await interaction.followup.send(embeds=batch, ephemeral=True)
                 sent_first = True
@@ -871,17 +914,17 @@ class AICog(commands.Cog):
     async def ai_set_model(self, interaction: Interaction, model_key: str):
         await interaction.response.defer(ephemeral=True)
         reg = get_ai_model_registry()
-        
+
         # Get AI service for logging
         ai_service = get_ai_service()
-        
+
         if model_key not in reg:
             # allow raw API name as advanced escape hatch
             if ai_service:
                 await ai_service.set_default_model(model_key, str(interaction.user.id))
             else:
                 set_ai_default_model(model_key)
-                
+
             if self.embed_logger:
                 await self.embed_logger.log_custom(
                     service="AI Configuration",
@@ -894,24 +937,24 @@ class AICog(commands.Cog):
                         "Model Key": f"`{model_key}`",
                         "Type": "Raw API Name (not in registry)",
                         "Warning": "Provider may reject if invalid",
-                        "Status": "⚠️ Set with warning"
-                    }
+                        "Status": "⚠️ Set with warning",
+                    },
                 )
-                
+
             return await interaction.followup.send(
                 f"⚠️ `{model_key}` is not in registry; set as raw API name. "
                 f"If provider rejects it, switch to a known key from `/ai_config`.",
-                ephemeral=True
+                ephemeral=True,
             )
-            
+
         # Set registered model
         if ai_service:
             await ai_service.set_default_model(model_key, str(interaction.user.id))
         else:
             set_ai_default_model(model_key)
-            
+
         info = reg[model_key]
-        
+
         if self.embed_logger:
             await self.embed_logger.log_custom(
                 service="AI Configuration",
@@ -921,16 +964,16 @@ class AICog(commands.Cog):
                 fields={
                     "Command": "/ai_set_model",
                     "Executed By": f"<@{interaction.user.id}>",
-                    "New Model": info['display'],
+                    "New Model": info["display"],
                     "Model Key": f"`{model_key}`",
                     "API Name": f"`{info['api_name']}`",
                     "Context Length": f"{info['ctx']:,}",
                     "Speed": f"~{info['tps']}/s",
-                    "Status": "✅ Successfully changed"
-                }
+                    "Status": "✅ Successfully changed",
+                },
             )
-        
+
         await interaction.followup.send(
             f"✅ Default model set to **{info['display']}**\n`{info['api_name']}` (ctx {info['ctx']:,}, ~{info['tps']}/s).",
-            ephemeral=True
+            ephemeral=True,
         )
