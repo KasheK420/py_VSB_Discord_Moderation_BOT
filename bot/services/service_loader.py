@@ -181,11 +181,11 @@ async def init_community_cogs(bot: discord.Client, embed_logger: EmbedLogger | N
         # Ensure DB schemas
         from bot.database.queries.economy_queries import EconomyQueries
         from bot.database.queries.hof_queries import HOFQueries
-        from bot.database.queries.kb_queries import KBQueries
+        #from bot.database.queries.kb_queries import KBQueries
         from bot.database.queries.shame_queries import ShameQueries
         from bot.database.queries.shop_queries import ShopQueries
 
-        await KBQueries.ensure_schema(database_service.pool)
+        #await KBQueries.ensure_schema(database_service.pool)
         await HOFQueries.ensure_schema(database_service.pool)
         await ShameQueries.ensure_schema(database_service.pool)
         await EconomyQueries.ensure_schema(database_service.pool)
