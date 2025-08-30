@@ -7,6 +7,8 @@
 ![Alembic](https://img.shields.io/badge/Alembic-1.13%2B-FFA116?style=flat-square)
 ![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)
 
+[![Build & Push Docker Image](https://github.com/KasheK420/py_VSB_Discord_Moderation_BOT/actions/workflows/docker-build.yml/badge.svg)](https://github.com/KasheK420/py_VSB_Discord_Moderation_BOT/actions/workflows/docker-build.yml)
+
 A comprehensive Discord moderation and community management bot for the VSB Discord server, featuring AI integration, advanced moderation tools, economy system, and automated workflows.
 
 ## 📋 Features & Services (v1.0)

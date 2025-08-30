@@ -1,0 +1,31 @@
+name: Mypy Type Check
+
+on:
+  push:
+    branches: [ main, master, dev, develop, stage* ]
+  pull_request:
+
+concurrency:
+  group: mypy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mypy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'poetry'
+
+      - name: Install Poetry
+        run: pipx install poetry==1.8.3
+
+      - name: Install deps (with typing extras)
+        run: poetry install --no-root --with dev
+
+      - name: mypy
+        run: poetry run mypy .
