@@ -6,6 +6,7 @@ Handles CAS callbacks with beautiful success page
 
 import asyncio
 import logging
+from datetime import datetime
 
 from aiohttp import web
 
@@ -72,19 +73,8 @@ class OAuthWebServer:
                 headers={"Content-Type": "text/plain"},
             )
 
-        # Generate state for OAuth flow
-        state = f"discord_{discord_id}"
-        self.auth_service.pending_auths[state] = {
-            "discord_id": discord_id,
-            "timestamp": asyncio.get_event_loop().time(),
-        }
-
-        # Build CAS login URL
-        cas_params = {"service": self.auth_service.service_url, "state": state}
-
-        import urllib.parse
-
-        cas_login_url = f"{self.auth_service.cas_login_url}?" + urllib.parse.urlencode(cas_params)
+        # ✅ Generate CAS login URL via AuthService (it creates & stores the correct state)
+        cas_login_url = self.auth_service.generate_cas_login_url(str(discord_id))
 
         # Log redirect
         if self.auth_service.embed_logger:
@@ -94,8 +84,7 @@ class OAuthWebServer:
                 description="Redirecting user to CAS authentication",
                 level=LogLevel.INFO,
                 fields={
-                    "Discord ID": discord_id,
-                    "State": state,
+                    "Discord ID": str(discord_id),
                     "CAS URL": self.auth_service.cas_login_url,
                     "Service URL": self.auth_service.service_url,
                 },
@@ -108,6 +97,7 @@ class OAuthWebServer:
         """Handle CAS callback"""
         self.request_count += 1
         ticket = request.query.get("ticket")
+        # State is returned to us inside the service URL; do NOT enforce any prefix
         state = request.query.get("state", request.query.get("_"))
         client_ip = request.remote
 
@@ -147,21 +137,19 @@ class OAuthWebServer:
                 headers={"Content-Type": "text/plain"},
             )
 
-        if not state or not state.startswith("discord_"):
+        if not state:
             if self.auth_service.embed_logger:
                 await self.auth_service.embed_logger.log_custom(
                     service="Web Server",
-                    title="Callback Error - Invalid State",
-                    description="CAS callback received with invalid state parameter",
+                    title="Callback Error - Missing State",
+                    description="CAS callback received without state parameter",
                     level=LogLevel.ERROR,
                     fields={
                         "Client IP": client_ip,
-                        "State": state if state else "None",
                         "Ticket": "Present" if ticket else "Missing",
-                        "Error": "Invalid or missing state parameter",
+                        "Error": "Missing state parameter",
                     },
                 )
-
             return web.Response(
                 text="Authentication failed: Invalid state",
                 status=400,
@@ -170,26 +158,24 @@ class OAuthWebServer:
 
         # Process the authentication
         try:
+            # AuthService returns {"discord_user_id": ..., "user_info": {...}}
             result = await self.auth_service.process_cas_callback(ticket, state)
+            user_info = result.get("user_info", {}) or {}
 
-            if result["success"]:
-                # Success page
-                html_content = self.generate_success_page(result["user"])
-                return web.Response(
-                    text=html_content,
-                    status=200,
-                    headers={"Content-Type": "text/html; charset=utf-8"},
-                )
-            else:
-                # Error page
-                html_content = self.generate_error_page(
-                    result.get("error", "Authentication failed")
-                )
-                return web.Response(
-                    text=html_content,
-                    status=400,
-                    headers={"Content-Type": "text/html; charset=utf-8"},
-                )
+            # Build the structure your HTML expects (display_name, login, linked_at)
+            rendered_user = {
+                "display_name": user_info.get("cn") or user_info.get("uid") or "User",
+                "login": user_info.get("uid", "unknown"),
+                "linked_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
+            }
+
+            # Success page
+            html_content = self.generate_success_page(rendered_user)
+            return web.Response(
+                text=html_content,
+                status=200,
+                headers={"Content-Type": "text/html; charset=utf-8"},
+            )
 
         except Exception as e:
             logger.error(f"Error processing CAS callback: {e}")
@@ -279,7 +265,7 @@ class OAuthWebServer:
                 fields={
                     "Total Requests Served": str(self.request_count),
                     "Host": self.host,
-                    "Port": str(self.port),
+                    "Port": self.port,
                     "Status": "🔴 Shutting down",
                 },
             )
