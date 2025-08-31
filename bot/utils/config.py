@@ -51,14 +51,17 @@ class Config:
     developer_role_id: int = int(os.getenv("DEVELOPER_ROLE_ID", "692150310231212092"))
     host_role_id: int = int(os.getenv("HOST_ROLE_ID", "690325052658548756"))
     absolvent_role_id: int = int(os.getenv("ABSOLVENT_ROLE_ID", "690325135542190091"))
+    moderator_role_id: int = int(os.getenv("MODERATOR_ROLE_ID", "0"))
+    vip_role_id: int = int(os.getenv("VIP_ROLE_ID", "0"))
     classes_role_ids: list[int] = field(
         default_factory=lambda: [int(x) for x in _split_csv("CLASSES_ROLE_IDS")]
     )
 
     # Channels
-    welcome_channel_id: int = int(os.getenv("WELCOME_CHANNEL_ID", "691407527253901312"))
+    welcome_channel_id: int = int(os.getenv("WELCOME_CHANNEL_ID", "1411740046817624184"))
     bot_channel_id: int = int(os.getenv("BOT_CHANNEL_ID", "691419856632938556"))
     admin_log_channel_id: int = int(os.getenv("ADMIN_LOG_CHANNEL_ID", "0"))
+    verification_channel_id: int = int(os.getenv("VERIFICATION_CHANNEL_ID", "691407527253901312"))
     teachers_accounts_channel_id: int = int(os.getenv("TEACHERS_ACCOUNTS_CHANNEL_ID", "0"))
     giveaway_channel_id: int = int(os.getenv("GIVEAWAY_CHANNEL_ID", "0"))
     vsb_news_channel_id: int = int(os.getenv("VSB_NEWS_CHANNEL_ID", "0"))

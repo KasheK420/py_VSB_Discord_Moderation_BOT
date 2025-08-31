@@ -1,17 +1,6 @@
 """
 bot/services/auth_service.py
-CAS Authentication Service for VSB SSO with comprehensive logging
-
-Key features:
-- Unified state handling (state generated only here).
-- CAS v3 ticket validation (/p3/serviceValidate).
-- Saves user in `users` table (existing queries).
-- Writes Discord metadata to `attributes.discord_meta`.
-- Assigns Discord role based on inferred user type.
-- NEW: Upserts discord_profiles, touches discord_user_stats (with IP),
-       inserts verification_audit (sha256 state/ticket), snapshots cas_attributes_history.
-
-Optional args in process_cas_callback() allow webserver to pass client_ip + headers.
+Fixed CAS Authentication Service - handles duplicate users and state management
 """
 
 from __future__ import annotations
@@ -27,18 +16,15 @@ from typing import Any, Dict, Optional
 
 import aiohttp
 import discord
+import asyncpg
 
-# Core models/queries you already have
 from bot.database.models.user import User
 from bot.database.queries.user_queries import UserQueries
-
-# NEW models/queries for the extra tables
 from bot.database.models.discord_profile import DiscordProfile
 from bot.database.queries.discord_profile_queries import DiscordProfileQueries
 from bot.database.queries.discord_stats_queries import DiscordStatsQueries
 from bot.database.queries.verification_audit_queries import VerificationAuditQueries
 from bot.database.queries.cas_attributes_history_queries import CASAttributesHistoryQueries
-
 from bot.utils.config import Config
 from bot.services.logging_service import EmbedLogger, LogLevel
 
@@ -58,12 +44,10 @@ def _account_age_days(dt: Optional[datetime]) -> Optional[float]:
 
 
 def _derive_country_code(cas_attrs: Dict[str, Any], discord_locale: Optional[str]) -> Optional[str]:
-    # Prefer CAS attributes if available
     for key in ("c", "country", "schacCountryOfCitizenship", "schacHomeOrganizationCountry"):
         v = cas_attrs.get(key)
         if isinstance(v, str) and len(v) in (2, 3):
             return v.upper()
-    # Fallback: from Discord locale (e.g., "cs-CZ" -> "CZ")
     if discord_locale and "-" in discord_locale:
         return discord_locale.split("-")[-1].upper()
     return None
@@ -72,11 +56,9 @@ def _derive_country_code(cas_attrs: Dict[str, Any], discord_locale: Optional[str
 def _first_ip_from_headers(headers: Optional[dict]) -> Optional[str]:
     if not headers:
         return None
-    # Try standard reverse-proxy headers
     for key in ("X-Forwarded-For", "x-forwarded-for"):
         raw = headers.get(key)
         if raw:
-            # X-Forwarded-For can be "client, proxy1, proxy2"
             ip = raw.split(",")[0].strip()
             return ip
     for key in ("X-Real-IP", "x-real-ip"):
@@ -94,23 +76,14 @@ class AuthService:
         self.user_queries = UserQueries(db_pool)
         self.embed_logger = embed_logger
 
-        # CAS configuration
         self.cas_server_url = "https://www.sso.vsb.cz"
         self.cas_login_url = f"{self.cas_server_url}/login"
         self.cas_validate_url = f"{self.cas_server_url}/p3/serviceValidate"
         self.cas_logout_url = f"{self.cas_server_url}/logout"
-
-        # Service URL (where CAS redirects back)
-        # IMPORTANT: must match the public HTTPS callback behind your reverse proxy
         self.service_url = "https://sso.vsb-discord.cz/callback"
-
-        # Temporary state storage for tracking authentication attempts
-        # state -> dict(discord_user_id, timestamp, ip_address, discord_meta)
+        
+        # State storage - don't pop until successful
         self.pending_auths: Dict[str, Dict[str, Any]] = {}
-
-    # ---------------------------
-    # Setup & interaction buttons
-    # ---------------------------
 
     async def setup(self):
         """Initialize service and register commands"""
@@ -131,7 +104,6 @@ class AuthService:
 
     async def register_button_handlers(self):
         """Register button interaction handlers"""
-
         @self.bot.event
         async def on_interaction(interaction: discord.Interaction):
             if interaction.type != discord.InteractionType.component:
@@ -144,7 +116,7 @@ class AuthService:
         user_id = str(interaction.user.id)
         username = interaction.user.name
 
-        # Prevent reverify if already verified
+        # Check if already verified
         try:
             existing_user = await self.user_queries.get_user_by_id(user_id)
             if existing_user and existing_user.activity == 1:
@@ -166,19 +138,11 @@ class AuthService:
                 return
         except Exception as e:
             logger.warning(f"Error checking existing user: {e}")
-            if self.embed_logger:
-                await self.embed_logger.log_error(
-                    service="Authentication",
-                    error=e,
-                    context=f"Database check failed for user {user_id} during auth button click",
-                )
-            # continue even if the check fails
 
-        # Log start
         if self.embed_logger:
             await self.embed_logger.log_auth_start(user_id, username)
 
-        # Collect Discord meta
+        # Collect Discord metadata
         acct_created = getattr(interaction.user, "created_at", None)
         discord_meta = {
             "id": user_id,
@@ -191,16 +155,14 @@ class AuthService:
             "guild_locale": getattr(interaction, "guild_locale", None),
         }
 
-        # Generate CAS login URL (also stores pending_auths with discord_meta)
         cas_login_url = self.generate_cas_login_url(user_id, extra_meta=discord_meta)
 
-        # Push link button to user
         view = discord.ui.View()
         link_button = discord.ui.Button(
             label="Otevřít VSB SSO / Open VSB SSO",
             style=discord.ButtonStyle.link,
             url=cas_login_url,
-            emoji="🔒",
+            emoji="🔐",
         )
         view.add_item(link_button)
 
@@ -211,10 +173,6 @@ class AuthService:
             ephemeral=True,
         )
 
-    # ---------------------------
-    # URL generation & state
-    # ---------------------------
-
     def generate_cas_login_url(self, discord_user_id: str, extra_meta: Optional[Dict[str, Any]] = None) -> str:
         """Generate CAS login URL with service parameter & persist pending state."""
         state = secrets.token_urlsafe(32)
@@ -222,7 +180,7 @@ class AuthService:
         self.pending_auths[state] = {
             "discord_user_id": discord_user_id,
             "timestamp": datetime.utcnow(),
-            "ip_address": None,  # optionally set in webserver if you want
+            "ip_address": None,
             "discord_meta": extra_meta or {},
         }
 
@@ -243,14 +201,9 @@ class AuthService:
                 )
             )
 
-        # Embed state into service URL (CAS will echo it back untouched)
         service_url_with_state = f"{self.service_url}?state={state}"
         params = {"service": service_url_with_state}
         return f"{self.cas_login_url}?{urllib.parse.urlencode(params)}"
-
-    # ---------------------------
-    # Callback path
-    # ---------------------------
 
     async def process_cas_callback(
         self,
@@ -259,12 +212,9 @@ class AuthService:
         client_ip: Optional[str] = None,
         request_headers: Optional[dict] = None,
     ) -> dict:
-        """
-        Process CAS callback and validate ticket.
-
-        NOTE: client_ip/request_headers are optional. If your webserver passes them,
-        we'll store best-effort IP into discord_user_stats.last_login_ip.
-        """
+        """Process CAS callback - fixed to handle duplicates and preserve state"""
+        
+        # Check state exists (don't pop yet!)
         if state not in self.pending_auths:
             if self.embed_logger:
                 await self.embed_logger.log_auth_failure(
@@ -274,11 +224,14 @@ class AuthService:
                 )
             raise ValueError("Invalid state parameter")
 
-        auth_info = self.pending_auths.pop(state)
+        # Get auth info WITHOUT removing it
+        auth_info = self.pending_auths.get(state)
+        if not auth_info:
+            raise ValueError("Invalid state parameter")
+            
         discord_user_id = auth_info["discord_user_id"]
         pending_started = auth_info.get("timestamp")
 
-        # Best-effort IP extraction
         ip_from_headers = _first_ip_from_headers(request_headers)
         login_ip = ip_from_headers or client_ip
 
@@ -298,49 +251,72 @@ class AuthService:
                 },
             )
 
-        # 1) Validate CAS ticket
-        user_info = await self.validate_cas_ticket(ticket, state)
-
-        # 2) Persist user, discord meta, and assign role
-        await self.verify_user(discord_user_id, user_info, auth_info.get("discord_meta") or {}, login_ip=login_ip)
-
-        # 3) NEW: Audit + attributes snapshot
         try:
-            v_audit = VerificationAuditQueries(self.db_pool)
-            await v_audit.insert(
-                discord_id=discord_user_id,
-                login=user_info["uid"],
-                cas_username=user_info["uid"],
-                state_plaintext=state,
-                ticket_plaintext=ticket,
-                result="success",
-                error_message=None,
-            )
+            # Validate CAS ticket
+            user_info = await self.validate_cas_ticket(ticket, state)
+            
+            # Save user with proper duplicate handling
+            await self.verify_user(discord_user_id, user_info, auth_info.get("discord_meta") or {}, login_ip=login_ip)
+            
+            # Only remove state after successful processing
+            self.pending_auths.pop(state, None)
+            
+            # Audit trail
+            try:
+                v_audit = VerificationAuditQueries(self.db_pool)
+                await v_audit.insert(
+                    discord_id=discord_user_id,
+                    login=user_info["uid"],
+                    cas_username=user_info["uid"],
+                    state_plaintext=state,
+                    ticket_plaintext=ticket,
+                    result="success",
+                    error_message=None,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to insert verification_audit: {e}")
+
+            try:
+                cas_hist = CASAttributesHistoryQueries(self.db_pool)
+                await cas_hist.insert_snapshot(
+                    discord_id=discord_user_id,
+                    login=user_info["uid"],
+                    attributes=user_info.get("attributes", {}),
+                )
+            except Exception as e:
+                logger.warning(f"Failed to insert cas_attributes_history: {e}")
+
+            try:
+                stats_q = DiscordStatsQueries(self.db_pool)
+                await stats_q.touch_seen(discord_user_id, last_login_ip=login_ip, increment_login=True)
+            except Exception as e:
+                logger.warning(f"Failed to update discord_user_stats: {e}")
+
+            if self.embed_logger:
+                await self.embed_logger.log_auth_success(discord_user_id, user_info)
+
+            return {"discord_user_id": discord_user_id, "user_info": user_info}
+            
         except Exception as e:
-            logger.warning(f"Failed to insert verification_audit: {e}")
-
-        try:
-            cas_hist = CASAttributesHistoryQueries(self.db_pool)
-            await cas_hist.insert_snapshot(
-                discord_id=discord_user_id,
-                login=user_info["uid"],
-                attributes=user_info.get("attributes", {}),
-            )
-        except Exception as e:
-            logger.warning(f"Failed to insert cas_attributes_history: {e}")
-
-        # 4) Stats touch_seen (login_count++, IP)
-        try:
-            stats_q = DiscordStatsQueries(self.db_pool)
-            await stats_q.touch_seen(discord_user_id, last_login_ip=login_ip, increment_login=True)
-        except Exception as e:
-            logger.warning(f"Failed to update discord_user_stats: {e}")
-
-        # 5) Log success
-        if self.embed_logger:
-            await self.embed_logger.log_auth_success(discord_user_id, user_info)
-
-        return {"discord_user_id": discord_user_id, "user_info": user_info}
+            # Log failure but keep state for retry
+            logger.error(f"Auth processing failed: {e}")
+            
+            # Audit failure
+            try:
+                v_audit = VerificationAuditQueries(self.db_pool)
+                await v_audit.insert(
+                    discord_id=discord_user_id,
+                    login="unknown",
+                    cas_username="unknown",
+                    state_plaintext=state,
+                    ticket_plaintext=ticket,
+                    result="failure",
+                    error_message=str(e),
+                )
+            except:
+                pass
+                
+            raise
 
     async def validate_cas_ticket(self, ticket: str, state: str) -> dict:
         """Validate CAS ticket and parse user info."""
@@ -369,7 +345,6 @@ class AuthService:
             ns = {"cas": "http://www.yale.edu/tp/cas"}
             success = root.find("cas:authenticationSuccess", ns)
             if success is None:
-                # Try to extract failure message for logging
                 failure = root.find("cas:authenticationFailure", ns)
                 code = failure.attrib.get("code") if failure is not None else "UNKNOWN"
                 msg = (failure.text or "").strip() if failure is not None else "CAS authentication failed"
@@ -416,20 +391,7 @@ class AuthService:
 
         except ET.ParseError as e:
             logger.error(f"Failed to parse CAS XML response: {e}")
-            logger.error(f"XML content (first 5k chars): {xml_response[:5000]}")
-            if self.embed_logger:
-                asyncio.create_task(
-                    self.embed_logger.log_error(
-                        service="Authentication",
-                        error=Exception(f"Invalid XML response from CAS server: {e}"),
-                        context=f"XML parsing failed - Content length: {len(xml_response)}",
-                    )
-                )
             raise
-
-    # ---------------------------
-    # User persistence & roles
-    # ---------------------------
 
     async def verify_user(
         self,
@@ -438,7 +400,7 @@ class AuthService:
         discord_meta_from_auth: Dict[str, Any],
         login_ip: Optional[str] = None,
     ):
-        """Determine user type, save user (with Discord meta), assign role, and upsert new tables."""
+        """Save user with proper duplicate handling using raw SQL"""
         login = user_info.get("uid", "").lower()
         email = user_info.get("mail", "")
         first_name = user_info.get("givenName", "")
@@ -447,20 +409,19 @@ class AuthService:
         affiliations = user_info.get("eduPersonAffiliation", [])
         cas_attrs = user_info.get("attributes", {})
 
-        # Determine user type (0=student, 2=teacher)
         user_type = self.determine_user_type(groups, affiliations)
 
-        # Try to fetch member for richer Discord info
+        # Get member info
         member = None
         try:
             gid = int(self.config.guild_id)
             guild = self.bot.get_guild(gid)
             if guild:
                 member = guild.get_member(int(discord_user_id))
-        except Exception:
-            member = None
+        except:
+            pass
 
-        # Compose Discord metadata
+        # Build Discord metadata
         discord_meta = dict(discord_meta_from_auth or {})
         if member:
             if not discord_meta.get("username"):
@@ -471,46 +432,58 @@ class AuthService:
                 discord_meta["account_created_at"] = member.created_at.isoformat()
                 discord_meta["account_age_days_at_auth"] = _account_age_days(member.created_at)
 
-            # avatar hash if available
-            try:
-                avatar = getattr(member, "avatar", None)
-                if avatar and getattr(avatar, "key", None):
-                    discord_meta.setdefault("avatar_hash", avatar.key)
-            except Exception:
-                pass
-
-            # is bot
-            try:
-                discord_meta["is_bot"] = bool(getattr(member, "bot", False))
-            except Exception:
-                pass
-
-        # Derive country (CAS > locale)
         country_code = _derive_country_code(cas_attrs, discord_meta.get("interaction_locale"))
         if country_code:
             discord_meta["country_code"] = country_code
 
-        # Merge into attributes JSON
         merged_attrs = dict(cas_attrs)
         merged_attrs["discord_meta"] = discord_meta
 
-        # Save/update in `users`
-        await self.save_user(
-            discord_id=discord_user_id,
-            login=login,
-            email=email,
-            first_name=first_name,
-            last_name=last_name,
-            user_type=user_type,
-            attributes=merged_attrs,
-        )
+        # Use PostgreSQL UPSERT with ON CONFLICT
+        async with self.db_pool.acquire() as conn:
+            try:
+                # For yearly re-verification: always update existing user by login
+                # Use INSERT ... ON CONFLICT to handle both new and existing users
+                await conn.execute("""
+                    INSERT INTO users (id, login, activity, type, verification, real_name, attributes, verified_at)
+                    VALUES ($1, $2, 1, $3, $4, $5, $6, $7)
+                    ON CONFLICT (login) DO UPDATE SET
+                        id = EXCLUDED.id,
+                        activity = 1,
+                        type = EXCLUDED.type,
+                        real_name = EXCLUDED.real_name,
+                        attributes = EXCLUDED.attributes,
+                        verified_at = EXCLUDED.verified_at
+                """, discord_user_id, login, user_type,
+                    self.generate_verification_code(),
+                    f"{first_name} {last_name} ({email})".strip(),
+                    merged_attrs, datetime.utcnow())
+                    
+                logger.info(f"User {discord_user_id} with login {login} saved/updated successfully")
+                
+            except asyncpg.UniqueViolationError as e:
+                # If we still get constraint violation, it's on Discord ID
+                # This means same Discord user trying with different VSB login
+                if "users_pkey" in str(e):
+                    # Update existing Discord user with new login
+                    await conn.execute("""
+                        UPDATE users 
+                        SET login = $1, activity = 1, type = $2,
+                            real_name = $3, attributes = $4, verified_at = $5
+                        WHERE id = $6
+                    """, login, user_type,
+                        f"{first_name} {last_name} ({email})".strip(),
+                        merged_attrs, datetime.utcnow(), discord_user_id)
+                    logger.info(f"Updated existing Discord user {discord_user_id} with new login {login}")
+                else:
+                    logger.error(f"Unexpected constraint violation: {e}")
+                    raise
 
         # Assign Discord role
         await self.assign_discord_role(discord_user_id, user_type)
 
-        # --- NEW TABLES PERSISTENCE (safe best-effort) ---
+        # Update profile tables (best effort)
         try:
-            # 1) discord_profiles upsert
             prof_q = DiscordProfileQueries(self.db_pool)
             profile = DiscordProfile(
                 discord_id=discord_user_id,
@@ -527,13 +500,6 @@ class AuthService:
             await prof_q.upsert(profile)
         except Exception as e:
             logger.warning(f"Failed to upsert discord_profiles: {e}")
-
-        try:
-            # 2) discord_user_stats touch_seen (login_count++, IP)
-            stats_q = DiscordStatsQueries(self.db_pool)
-            await stats_q.touch_seen(discord_user_id, last_login_ip=login_ip, increment_login=True)
-        except Exception as e:
-            logger.warning(f"Failed to update discord_user_stats: {e}")
 
     def determine_user_type(self, groups: list, affiliations: list) -> int:
         """Determine if user is student (0) or teacher (2)."""
@@ -579,82 +545,21 @@ class AuthService:
             )
         return 0
 
-    async def save_user(
-        self,
-        discord_id: str,
-        login: str,
-        email: str,
-        first_name: str,
-        last_name: str,
-        user_type: int,
-        attributes: dict,
-    ):
-        """Save or update user in database (users table)."""
-        user = User(
-            id=discord_id,
-            login=login,
-            activity=1,
-            type=user_type,
-            verification=self.generate_verification_code(),
-            real_name=f"{first_name} {last_name} ({email})".strip(),
-            attributes=attributes,
-            verified_at=datetime.utcnow(),
-        )
-
-        try:
-            await self.user_queries.upsert_user(user)
-            if self.embed_logger:
-                await self.embed_logger.log_custom(
-                    service="Authentication",
-                    title="User Data Saved",
-                    description="User information stored in database",
-                    level=LogLevel.SUCCESS,
-                    fields={
-                        "User": f"<@{discord_id}>",
-                        "Login": login,
-                        "Type": "Teacher" if user_type == 2 else "Student",
-                        "Email": email[:80] or "n/a",
-                        "Attributes": f"{len(attributes)} items (incl. discord_meta)",
-                    },
-                )
-        except Exception as e:
-            if self.embed_logger:
-                await self.embed_logger.log_error(
-                    service="Authentication",
-                    error=e,
-                    context=f"Failed to save user data - Discord ID: {discord_id}, Login: {login}",
-                )
-            raise
-
     async def assign_discord_role(self, discord_user_id: str, user_type: int):
         """Assign appropriate Discord role to user."""
         try:
             gid = int(self.config.guild_id)
-        except Exception:
+        except:
             gid = self.config.guild_id
 
         guild = self.bot.get_guild(gid)
         if not guild:
-            error = Exception(f"Guild {self.config.guild_id} not found")
-            logger.error(str(error))
-            if self.embed_logger:
-                await self.embed_logger.log_error(
-                    service="Authentication",
-                    error=error,
-                    context="Role assignment failed - guild not found",
-                )
+            logger.error(f"Guild {self.config.guild_id} not found")
             return
 
         member = guild.get_member(int(discord_user_id))
         if not member:
-            error = Exception(f"Member {discord_user_id} not found in guild")
-            logger.error(str(error))
-            if self.embed_logger:
-                await self.embed_logger.log_error(
-                    service="Authentication",
-                    error=error,
-                    context="Role assignment failed - member not found in guild",
-                )
+            logger.error(f"Member {discord_user_id} not found in guild")
             return
 
         role_id = self.config.teacher_role_id if user_type == 2 else self.config.student_role_id
@@ -662,12 +567,7 @@ class AuthService:
 
         role = guild.get_role(role_id)
         if not role:
-            if self.embed_logger:
-                await self.embed_logger.log_error(
-                    service="Authentication",
-                    error=Exception(f"Role {role_id} not found in guild"),
-                    context=f"Role assignment failed - role {role_id} ({role_name}) not found",
-                )
+            logger.error(f"Role {role_id} not found")
             return
 
         try:
@@ -688,19 +588,9 @@ class AuthService:
                     },
                 )
         except discord.Forbidden:
-            if self.embed_logger:
-                await self.embed_logger.log_error(
-                    service="Authentication",
-                    error=Exception("Missing permission to assign role"),
-                    context=f"Role assignment failed - {discord_user_id} -> {role.name}",
-                )
+            logger.error(f"Missing permission to assign role")
         except Exception as e:
-            if self.embed_logger:
-                await self.embed_logger.log_error(
-                    service="Authentication",
-                    error=e,
-                    context=f"Role assignment failed - {discord_user_id} -> {role.name}",
-                )
+            logger.error(f"Failed to assign role: {e}")
 
     def generate_verification_code(self) -> str:
         """Generate random verification code."""

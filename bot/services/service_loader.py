@@ -165,14 +165,7 @@ async def init_core_services(bot: discord.Client, config):
 
 async def init_community_cogs(bot: discord.Client, embed_logger: EmbedLogger | None) -> float:
     """
-    Adds community cogs:
-      - WelcomeCog
-      - HelpCenterCog
-      - HallOfFameCog
-      - HallOfShameCog
-      - EconomyCog
-      - GamblingCog
-      - ShopCog
+    Adds community cogs including auth management
     """
     from datetime import datetime
 
@@ -181,11 +174,9 @@ async def init_community_cogs(bot: discord.Client, embed_logger: EmbedLogger | N
         # Ensure DB schemas
         from bot.database.queries.economy_queries import EconomyQueries
         from bot.database.queries.hof_queries import HOFQueries
-        #from bot.database.queries.kb_queries import KBQueries
         from bot.database.queries.shame_queries import ShameQueries
         from bot.database.queries.shop_queries import ShopQueries
 
-        #await KBQueries.ensure_schema(database_service.pool)
         await HOFQueries.ensure_schema(database_service.pool)
         await ShameQueries.ensure_schema(database_service.pool)
         await EconomyQueries.ensure_schema(database_service.pool)
@@ -197,19 +188,25 @@ async def init_community_cogs(bot: discord.Client, embed_logger: EmbedLogger | N
         from bot.cogs.gambling_cog import GamblingCog
         from bot.cogs.hall_of_fame_cog import HallOfFameCog
         from bot.cogs.hall_of_shame_cog import HallOfShameCog
-
-        # from bot.cogs.help_center_cog import HelpCenterCog
         from bot.cogs.shop_cog import ShopCog
         from bot.cogs.welcome_cog import WelcomeCog
+        from bot.cogs.auth_management_cog import AuthManagementCog
 
         await bot.add_cog(WelcomeCog(bot))
-        # await bot.add_cog(HelpCenterCog(bot))
         await bot.add_cog(HallOfFameCog(bot))
         await bot.add_cog(HallOfShameCog(bot))
         await bot.add_cog(EconomyCog(bot))
         await bot.add_cog(GamblingCog(bot))
         await bot.add_cog(ShopCog(bot))
         await bot.add_cog(CasinoCog(bot))
+        
+        auth_mgmt_cog = AuthManagementCog(
+            bot=bot,
+            db_pool=database_service.pool,
+            config=bot.config,
+            embed_logger=embed_logger
+        )
+        await bot.add_cog(auth_mgmt_cog)
 
         dt = (datetime.utcnow() - t0).total_seconds()
         logger.info(f"Community cogs loaded in {dt:.2f}s")
@@ -223,6 +220,8 @@ async def init_community_cogs(bot: discord.Client, embed_logger: EmbedLogger | N
             shame_id = getattr(bot.config, "hall_of_shame_channel_id", 0)
             gamble_id = getattr(bot.config, "gambling_channel_id", 0)
             shop_announce = getattr(bot.config, "shop_announce_channel_id", 0)
+            verify_id = getattr(bot.config, "verification_channel_id", 0)  # NEW
+            
             await embed_logger.log_custom(
                 service="Service Loader",
                 title="Community Cogs Loaded",
@@ -235,6 +234,8 @@ async def init_community_cogs(bot: discord.Client, embed_logger: EmbedLogger | N
                     "Hall of Shame": f"<#{shame_id}>" if shame_id else "n/a",
                     "Gambling": f"<#{gamble_id}>" if gamble_id else "n/a",
                     "Shop announce": f"<#{shop_announce}>" if shop_announce else "n/a",
+                    "Verification": f"<#{verify_id}>" if verify_id else "n/a",  # NEW
+                    "Auth Management": "✅ Active",  # NEW
                     "XP/Economy": (
                         "enabled" if getattr(bot.config, "xp_enabled", True) else "disabled"
                     ),
