@@ -7,12 +7,13 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
 import secrets
 import urllib.parse
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Set
 
 import aiohttp
 import discord
@@ -84,6 +85,8 @@ class AuthService:
         
         # State storage - don't pop until successful
         self.pending_auths: Dict[str, Dict[str, Any]] = {}
+        
+        self.used_tickets: Set[str] = set()
 
     async def setup(self):
         """Initialize service and register commands"""
@@ -213,6 +216,18 @@ class AuthService:
         request_headers: Optional[dict] = None,
     ) -> dict:
         """Process CAS callback - fixed to handle duplicates and preserve state"""
+        
+        # Check if ticket was already used
+        if ticket in self.used_tickets:
+            logger.warning(f"Ticket {ticket[:8]}... already used, rejecting")
+            raise ValueError("Ticket already processed")
+        
+        # Mark ticket as used immediately
+        self.used_tickets.add(ticket)
+        
+        # Clean up old tickets (keep only last 1000)
+        if len(self.used_tickets) > 1000:
+            self.used_tickets = set(list(self.used_tickets)[-500:])
         
         # Check state exists (don't pop yet!)
         if state not in self.pending_auths:
@@ -399,7 +414,7 @@ class AuthService:
         user_info: dict,
         discord_meta_from_auth: Dict[str, Any],
         login_ip: Optional[str] = None,
-    ):
+        ):
         """Save user with proper duplicate handling using raw SQL"""
         login = user_info.get("uid", "").lower()
         email = user_info.get("mail", "")
@@ -408,9 +423,7 @@ class AuthService:
         groups = user_info.get("groups", [])
         affiliations = user_info.get("eduPersonAffiliation", [])
         cas_attrs = user_info.get("attributes", {})
-
         user_type = self.determine_user_type(groups, affiliations)
-
         # Get member info
         member = None
         try:
@@ -446,7 +459,7 @@ class AuthService:
                 # Use INSERT ... ON CONFLICT to handle both new and existing users
                 await conn.execute("""
                     INSERT INTO users (id, login, activity, type, verification, real_name, attributes, verified_at)
-                    VALUES ($1, $2, 1, $3, $4, $5, $6, $7)
+                    VALUES ($1, $2, 1, $3, $4, $5, $6::jsonb, $7)
                     ON CONFLICT (login) DO UPDATE SET
                         id = EXCLUDED.id,
                         activity = 1,
@@ -457,7 +470,8 @@ class AuthService:
                 """, discord_user_id, login, user_type,
                     self.generate_verification_code(),
                     f"{first_name} {last_name} ({email})".strip(),
-                    merged_attrs, datetime.utcnow())
+                    json.dumps(merged_attrs),  # <-- SERIALIZE TO JSON STRING
+                    datetime.utcnow())
                     
                 logger.info(f"User {discord_user_id} with login {login} saved/updated successfully")
                 
@@ -469,11 +483,12 @@ class AuthService:
                     await conn.execute("""
                         UPDATE users 
                         SET login = $1, activity = 1, type = $2,
-                            real_name = $3, attributes = $4, verified_at = $5
+                            real_name = $3, attributes = $4::jsonb, verified_at = $5
                         WHERE id = $6
                     """, login, user_type,
                         f"{first_name} {last_name} ({email})".strip(),
-                        merged_attrs, datetime.utcnow(), discord_user_id)
+                        json.dumps(merged_attrs),  # <-- SERIALIZE TO JSON STRING
+                        datetime.utcnow(), discord_user_id)
                     logger.info(f"Updated existing Discord user {discord_user_id} with new login {login}")
                 else:
                     logger.error(f"Unexpected constraint violation: {e}")
@@ -481,7 +496,37 @@ class AuthService:
 
         # Assign Discord role
         await self.assign_discord_role(discord_user_id, user_type)
-
+        try:
+        # Get auth management cog if it exists
+            from bot.cogs.auth_management_cog import AuthManagementCog
+            
+            guild = self.bot.get_guild(int(self.config.guild_id))
+            if guild:
+                member = guild.get_member(int(discord_user_id))
+                if member:
+                    # Find the auth management cog
+                    for cog in self.bot.cogs.values():
+                        if isinstance(cog, AuthManagementCog):
+                            # Check if user has backed up roles
+                            if str(discord_user_id) in cog.role_backups:
+                                await cog.restore_user_roles(member)
+                                logger.info(f"Restored roles for {discord_user_id} after re-verification")
+                                
+                                if self.embed_logger:
+                                    await self.embed_logger.log_custom(
+                                        service="Authentication",
+                                        title="Roles Restored",
+                                        description="User's previous roles restored after re-verification",
+                                        level=LogLevel.SUCCESS,
+                                        fields={
+                                            "User": f"<@{discord_user_id}>",
+                                            "Login": user_info.get("uid", "unknown"),
+                                            "Status": "✅ Roles restored",
+                                        }
+                                    )
+                            break
+        except Exception as e:
+            logger.warning(f"Failed to check/restore roles for {discord_user_id}: {e}")
         # Update profile tables (best effort)
         try:
             prof_q = DiscordProfileQueries(self.db_pool)

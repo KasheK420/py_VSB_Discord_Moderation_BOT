@@ -50,7 +50,7 @@ class VerificationCog(commands.Cog):
                     fields={
                         "Command": "/setup_verification",
                         "Executed By": f"<@{interaction.user.id}>",
-                        "Channel": f"<#{self.bot.config.welcome_channel_id}>",
+                        "Channel": f"<#{self.bot.config.verification_channel_id}>",
                         "Status": "✅ Posted successfully",
                     },
                 )

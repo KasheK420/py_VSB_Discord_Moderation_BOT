@@ -81,7 +81,7 @@ class WelcomeCog(commands.Cog):
         ) or getattr(bot.config, "welcome_channel_id", None)
 
         # Verification channel (for DM instructions)
-        self.verification_channel_id: int | None = getattr(bot.config, "welcome_channel_id", None)
+        self.verification_channel_id: int | None = getattr(bot.config, "verification_channel_id", None)
 
         # Tenor settings (optional). Default locale -> cs_CZ so retrieved GIFs match language where possible.
         api_key = getattr(bot.config, "tenor_api_key", "") or ""
