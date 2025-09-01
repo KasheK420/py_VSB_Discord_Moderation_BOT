@@ -13,7 +13,7 @@ ResultType = Literal["success", "failure"]
 @dataclass
 class VerificationAudit:
     id: Optional[int]
-    discord_id: str
+    discord_id: int
     login: str
     cas_username: str
     state_sha256: str

@@ -1,6 +1,6 @@
 # bot/services/onboarding_service.py
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 
 import discord
 
@@ -14,17 +14,23 @@ class OnboardingService:
     Handles onboarding flows:
       - posts SSO verification message
       - posts alternative role selection (Host / Absolvent)
-      - logs joins/leaves
+      - logs joins/leaves/kicks/bans
       - generates verification statistics
+      - assigns roles from component interactions
     """
 
     def __init__(self, config):
         self.config = config
         self.embed_logger: Optional = None
+        self._interaction_hooked: bool = False  # ensure we don't double-register
 
     def set_logger(self, embed_logger):
         """Attach the embed logger used for admin/channel logging."""
         self.embed_logger = embed_logger
+
+    # ---------------------------
+    # Public bootstrap / handlers
+    # ---------------------------
 
     async def ensure_verification_message(self, bot: discord.Client):
         """
@@ -33,6 +39,10 @@ class OnboardingService:
         It posts TWO messages in order:
           1) SSO Verification embed with one button (custom_id="auth_sso")
           2) Alternative roles embed with two buttons (Host, Absolvent)
+
+        Note: We keep custom_id pattern 'role_host_<id>' / 'role_absolvent_<id>' so
+        previously posted messages continue to work. Our interaction handler
+        supports BOTH these and plain 'role_host' / 'role_absolvent'.
         """
         guild_id = int(self.config.guild_id)
         verification_channel_id = int(self.config.verification_channel_id)
@@ -82,7 +92,6 @@ class OnboardingService:
                         await msg.delete()
                         messages_deleted += 1
                     except Exception:
-                        # ignore per-message deletion errors
                         pass
         except Exception as e:
             logger.warning(f"Failed to clean old messages: {e}")
@@ -112,7 +121,6 @@ class OnboardingService:
                 },
             )
 
-        # --- VSB TUO FEI 'pistachio' color bar ---
         pistachio = discord.Color.from_str("#8BC34A")
 
         # =========================
@@ -162,6 +170,7 @@ class OnboardingService:
             discord.ui.Button(
                 label="Host",
                 style=discord.ButtonStyle.secondary,
+                # Keep suffixed pattern so old messages keep working
                 custom_id=f"role_host_{self.config.host_role_id}",
                 emoji="🙋",
             )
@@ -222,13 +231,198 @@ class OnboardingService:
                     context=f"ensure_verification_message - failed to post in channel {verification_channel_id}",
                 )
 
+        # Make sure interaction handler is registered once
+        self.register_interaction_handler(bot)
+
+    def register_interaction_handler(self, bot: discord.Client):
+        """
+        Hook a single on_interaction listener that catches our button clicks.
+        Safe to call multiple times; will only register once per process.
+        """
+        if self._interaction_hooked:
+            return
+
+        async def _listener(interaction: discord.Interaction):
+            try:
+                if interaction.type != discord.InteractionType.component:
+                    return
+                custom_id = interaction.data.get("custom_id", "")
+                if not custom_id:
+                    return
+
+                # SSO button (handled elsewhere by your OAuth web server typically)
+                if custom_id == "auth_sso":
+                    await self._respond_ephemeral(
+                        interaction,
+                        "🔒 Ověření: otevři odkaz, který ti bot poslal do DM. Pokud nic nepřišlo, "
+                        "zkontroluj soukromí zpráv nebo napiš moderátorům.",
+                        mention=False,
+                    )
+                    return
+
+                # Role buttons
+                role_info = self._parse_role_custom_id(custom_id)
+                if role_info is None:
+                    return  # not our button
+
+                role_type, role_id = role_info
+                await self._handle_role_assignment_interaction(interaction, role_type, role_id)
+
+            except Exception as e:
+                logger.exception("Error in onboarding on_interaction: %s", e)
+                if self.embed_logger:
+                    await self.embed_logger.log_error(
+                        service="Onboarding Service",
+                        error=e,
+                        context="on_interaction handler",
+                    )
+
+        bot.add_listener(_listener, "on_interaction")
+        self._interaction_hooked = True
+        logger.info("OnboardingService: on_interaction handler registered")
+
+    # ---------------------------
+    # Interaction / role helpers
+    # ---------------------------
+
+    def _parse_role_custom_id(self, custom_id: str) -> Optional[Tuple[str, int]]:
+        """
+        Accepts:
+          - 'role_host_<id>' / 'role_absolvent_<id>'
+          - 'role_host' / 'role_absolvent'  (falls back to config IDs)
+        Returns tuple (role_type, role_id) or None if not ours.
+        """
+        if custom_id.startswith("role_host"):
+            if custom_id.startswith("role_host_"):
+                try:
+                    rid = int(custom_id.split("role_host_")[1])
+                except Exception:
+                    rid = int(self.config.host_role_id)
+            else:
+                rid = int(self.config.host_role_id)
+            return ("host", rid)
+
+        if custom_id.startswith("role_absolvent"):
+            if custom_id.startswith("role_absolvent_"):
+                try:
+                    rid = int(custom_id.split("role_absolvent_")[1])
+                except Exception:
+                    rid = int(self.config.absolvent_role_id)
+            else:
+                rid = int(self.config.absolvent_role_id)
+            return ("absolvent", rid)
+
+        return None
+
+    async def _handle_role_assignment_interaction(
+        self, interaction: discord.Interaction, role_type: str, role_id: int
+    ):
+        """Assign or toggle the role for the clicking member."""
+        guild = interaction.guild
+        member = interaction.user if isinstance(interaction.user, discord.Member) else None
+
+        if guild is None or member is None:
+            await self._respond_ephemeral(
+                interaction, "⚠️ Nelze přiřadit roli mimo server.", mention=False
+            )
+            return
+
+        role = guild.get_role(role_id)
+        if role is None:
+            await self._respond_ephemeral(
+                interaction, "❌ Tato role už neexistuje. Kontaktuj moderátory.", mention=False
+            )
+            if self.embed_logger:
+                await self.embed_logger.log_custom(
+                    service="Onboarding Service",
+                    title="Role Assignment Failed",
+                    description="Configured role was not found",
+                    level=LogLevel.ERROR,
+                    fields={
+                        "User": f"{member} ({member.id})",
+                        "Role Type": role_type,
+                        "Role ID": str(role_id),
+                        "Guild": guild.name,
+                    },
+                )
+            return
+
+        # Toggle behavior: add if missing, remove if already has
+        try:
+            if role in member.roles:
+                await member.remove_roles(role, reason=f"Onboarding toggle: {role_type}")
+                await self._respond_ephemeral(
+                    interaction, f"➖ Odebrána role **{role.name}**.", mention=False
+                )
+                action = "removed"
+            else:
+                await member.add_roles(role, reason=f"Onboarding assign: {role_type}")
+                await self._respond_ephemeral(
+                    interaction, f"✅ Přiřazena role **{role.name}**.", mention=False
+                )
+                action = "assigned"
+
+            logger.info("Onboarding %s role '%s' to %s", action, role.name, member)
+
+            if self.embed_logger:
+                await self.embed_logger.log_custom(
+                    service="Onboarding Service",
+                    title="Role Updated",
+                    description=f"Role {action}",
+                    level=LogLevel.SUCCESS if action == "assigned" else LogLevel.INFO,
+                    fields={
+                        "User": f"{member.mention} ({member.id})",
+                        "Role": f"{role.name} ({role.id})",
+                        "Role Type": role_type,
+                        "Guild": guild.name,
+                        "Status": "OK",
+                    },
+                )
+
+        except discord.Forbidden as e:
+            await self._respond_ephemeral(
+                interaction,
+                "⛔ Nemám oprávnění upravovat tvoje role. Kontaktuj moderátory.",
+                mention=False,
+            )
+            if self.embed_logger:
+                await self.embed_logger.log_error(
+                    service="Onboarding Service",
+                    error=e,
+                    context=f"Assign role '{role.name}' forbidden",
+                )
+        except Exception as e:
+            await self._respond_ephemeral(
+                interaction, "❌ Něco se pokazilo při přiřazení role.", mention=False
+            )
+            if self.embed_logger:
+                await self.embed_logger.log_error(
+                    service="Onboarding Service",
+                    error=e,
+                    context=f"Assign role '{role.name}' unexpected error",
+                )
+
+    async def _respond_ephemeral(
+        self, interaction: discord.Interaction, message: str, mention: bool = False
+    ):
+        """Ephemeral helper (edit or respond)."""
+        try:
+            if interaction.response.is_done():
+                await interaction.followup.send(message, ephemeral=True)
+            else:
+                await interaction.response.send_message(message, ephemeral=True)
+        except Exception as e:
+            logger.debug("Failed ephemeral response: %s", e)
+
+    # ---------------------------
+    # Member lifecycle logging
+    # ---------------------------
+
     async def handle_user_join(self, member: discord.Member):
         """Handle new user joining the server with risk assessment and logging."""
-        # Compute account age regardless of embed_logger presence (fixes a small bug)
         account_age_hours = (discord.utils.utcnow() - member.created_at).total_seconds() / 3600
         account_age_days = account_age_hours / 24
 
-        # Determine risk level
         if account_age_hours < 1:
             risk_level = "🔴 Very High"
         elif account_age_hours < 24:
@@ -302,6 +496,38 @@ class OnboardingService:
             f"Member left: {member.name}#{member.discriminator} ({member.id}) - Was verified: {was_verified}"
         )
 
+    async def handle_user_kicked(self, member: discord.Member, reason: Optional[str] = None):
+        """Separate log entry for kicked users."""
+        if self.embed_logger:
+            await self.embed_logger.log_custom(
+                service="Onboarding Service",
+                title="User Kicked",
+                description="Member was kicked from the server",
+                level=LogLevel.WARNING,
+                fields={
+                    "User": f"{member} ({member.id})",
+                    "Reason": reason or "—",
+                },
+            )
+
+    async def handle_user_banned(self, user: discord.User, reason: Optional[str] = None):
+        """Separate log entry for banned users."""
+        if self.embed_logger:
+            await self.embed_logger.log_custom(
+                service="Onboarding Service",
+                title="User Banned",
+                description="User was banned from the server",
+                level=LogLevel.ERROR,
+                fields={
+                    "User": f"{user} ({user.id})",
+                    "Reason": reason or "—",
+                },
+            )
+
+    # ---------------------------
+    # Stats
+    # ---------------------------
+
     async def get_verification_stats(self, bot: discord.Client) -> Dict[str, Any]:
         """
         Generate onboarding / verification statistics from the guild.
@@ -318,12 +544,10 @@ class OnboardingService:
         if not guild:
             return {"error": "Guild not found"}
 
-        # Basic member statistics (member_count requires privileged intents on large guilds)
         total_members = guild.member_count or len(guild.members)
         bot_members = len([m for m in guild.members if m.bot])
         human_members = total_members - bot_members
 
-        # Role statistics (student/teacher roles if configured)
         student_role = None
         teacher_role = None
         try:

@@ -414,8 +414,8 @@ class AuthService:
         user_info: dict,
         discord_meta_from_auth: Dict[str, Any],
         login_ip: Optional[str] = None,
-        ):
-        """Save user with proper duplicate handling using raw SQL"""
+    ):
+        """Save user with proper duplicate handling and type conversion."""
         login = user_info.get("uid", "").lower()
         email = user_info.get("mail", "")
         first_name = user_info.get("givenName", "")
@@ -424,6 +424,7 @@ class AuthService:
         affiliations = user_info.get("eduPersonAffiliation", [])
         cas_attrs = user_info.get("attributes", {})
         user_type = self.determine_user_type(groups, affiliations)
+        
         # Get member info
         member = None
         try:
@@ -431,8 +432,8 @@ class AuthService:
             guild = self.bot.get_guild(gid)
             if guild:
                 member = guild.get_member(int(discord_user_id))
-        except:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to get member {discord_user_id}: {e}")
 
         # Build Discord metadata
         discord_meta = dict(discord_meta_from_auth or {})
@@ -452,11 +453,10 @@ class AuthService:
         merged_attrs = dict(cas_attrs)
         merged_attrs["discord_meta"] = discord_meta
 
-        # Use PostgreSQL UPSERT with ON CONFLICT
+        # Save to users table (uses VARCHAR for discord_id)
         async with self.db_pool.acquire() as conn:
             try:
                 # For yearly re-verification: always update existing user by login
-                # Use INSERT ... ON CONFLICT to handle both new and existing users
                 await conn.execute("""
                     INSERT INTO users (id, login, activity, type, verification, real_name, attributes, verified_at)
                     VALUES ($1, $2, 1, $3, $4, $5, $6::jsonb, $7)
@@ -467,47 +467,51 @@ class AuthService:
                         real_name = EXCLUDED.real_name,
                         attributes = EXCLUDED.attributes,
                         verified_at = EXCLUDED.verified_at
-                """, discord_user_id, login, user_type,
+                """, 
+                    discord_user_id,  # Keep as string for users table
+                    login, 
+                    user_type,
                     self.generate_verification_code(),
                     f"{first_name} {last_name} ({email})".strip(),
-                    json.dumps(merged_attrs),  # <-- SERIALIZE TO JSON STRING
-                    datetime.utcnow())
-                    
+                    json.dumps(merged_attrs),
+                    datetime.utcnow()
+                )
                 logger.info(f"User {discord_user_id} with login {login} saved/updated successfully")
                 
             except asyncpg.UniqueViolationError as e:
-                # If we still get constraint violation, it's on Discord ID
-                # This means same Discord user trying with different VSB login
+                # Handle same Discord user with different VSB login
                 if "users_pkey" in str(e):
-                    # Update existing Discord user with new login
                     await conn.execute("""
                         UPDATE users 
                         SET login = $1, activity = 1, type = $2,
                             real_name = $3, attributes = $4::jsonb, verified_at = $5
                         WHERE id = $6
-                    """, login, user_type,
+                    """, 
+                        login, 
+                        user_type,
                         f"{first_name} {last_name} ({email})".strip(),
-                        json.dumps(merged_attrs),  # <-- SERIALIZE TO JSON STRING
-                        datetime.utcnow(), discord_user_id)
+                        json.dumps(merged_attrs),
+                        datetime.utcnow(), 
+                        discord_user_id  # Keep as string
+                    )
                     logger.info(f"Updated existing Discord user {discord_user_id} with new login {login}")
                 else:
                     logger.error(f"Unexpected constraint violation: {e}")
                     raise
 
-        # Assign Discord role
+        # Assign Discord role (expects string)
         await self.assign_discord_role(discord_user_id, user_type)
+        
+        # Try to restore previous roles if re-verifying
         try:
-        # Get auth management cog if it exists
             from bot.cogs.auth_management_cog import AuthManagementCog
             
             guild = self.bot.get_guild(int(self.config.guild_id))
             if guild:
                 member = guild.get_member(int(discord_user_id))
                 if member:
-                    # Find the auth management cog
                     for cog in self.bot.cogs.values():
                         if isinstance(cog, AuthManagementCog):
-                            # Check if user has backed up roles
                             if str(discord_user_id) in cog.role_backups:
                                 await cog.restore_user_roles(member)
                                 logger.info(f"Restored roles for {discord_user_id} after re-verification")
@@ -527,11 +531,12 @@ class AuthService:
                             break
         except Exception as e:
             logger.warning(f"Failed to check/restore roles for {discord_user_id}: {e}")
-        # Update profile tables (best effort)
+        
+        # Update discord_profiles table (uses VARCHAR for discord_id)
         try:
             prof_q = DiscordProfileQueries(self.db_pool)
             profile = DiscordProfile(
-                discord_id=discord_user_id,
+                discord_id=discord_user_id,  # Keep as string
                 username=discord_meta.get("username") or (member.name if member else "unknown"),
                 global_name=discord_meta.get("global_name"),
                 discriminator=discord_meta.get("discriminator"),
@@ -545,6 +550,63 @@ class AuthService:
             await prof_q.upsert(profile)
         except Exception as e:
             logger.warning(f"Failed to upsert discord_profiles: {e}")
+        
+        # Update CAS attributes history
+        try:
+            cas_q = CASAttributesHistoryQueries(self.db_pool)
+            cas_history = CASAttributesHistory(
+                id=None,
+                discord_id=discord_user_id,  # Keep as string
+                login=login,
+                cas_username=user_info.get("uid", "unknown"),
+                cas_attributes=cas_attrs,
+                auth_time=datetime.utcnow(),
+                client_ip=login_ip,
+            )
+            await cas_q.insert(cas_history)
+        except Exception as e:
+            logger.warning(f"Failed to insert cas_attributes_history: {e}")
+        
+        # Update discord_user_stats (uses VARCHAR for discord_id)
+        try:
+            stats_q = DiscordStatsQueries(self.db_pool)
+            await stats_q.touch_seen(
+                discord_user_id,  # Keep as string
+                last_login_ip=login_ip, 
+                increment_login=True
+            )
+        except Exception as e:
+            logger.warning(f"Failed to update discord_user_stats: {e}")
+        
+        # Initialize economy stats if needed (uses BIGINT - need conversion!)
+        try:
+            from bot.database.queries.economy_queries import EconomyQueries
+            user_id_int = int(discord_user_id)  # Convert to int for economy tables
+            
+            # Ensure user has economy stats row
+            async with self.db_pool.acquire() as conn:
+                await conn.execute(
+                    """
+                    INSERT INTO xp_stats(user_id, daily_xp, daily_xp_date) 
+                    VALUES($1, 0, CURRENT_DATE)
+                    ON CONFLICT (user_id) DO NOTHING
+                    """,
+                    user_id_int  # Use int for economy tables
+                )
+                logger.debug(f"Ensured economy stats for user {user_id_int}")
+        except ValueError:
+            logger.error(f"Invalid discord_user_id for economy conversion: {discord_user_id}")
+        except Exception as e:
+            logger.warning(f"Failed to initialize economy stats: {e}")
+        
+        # Log successful authentication
+        if self.embed_logger:
+            await self.embed_logger.log_auth_success(discord_user_id, user_info)
+        
+        return {
+            "discord_user_id": discord_user_id,
+            "user_info": user_info
+        }
 
     def determine_user_type(self, groups: list, affiliations: list) -> int:
         """Determine if user is student (0) or teacher (2)."""

@@ -1,8 +1,6 @@
 # bot/database/queries/shame_queries.py
 from __future__ import annotations
-
 from typing import Any
-
 import asyncpg
 
 
@@ -27,7 +25,7 @@ class ShameQueries:
             CREATE TABLE IF NOT EXISTS shame_events(
               id BIGSERIAL PRIMARY KEY,
               user_id BIGINT NOT NULL,
-              kind TEXT NOT NULL,  -- 'warn'|'kick'|'ban'|'timeout'
+              kind TEXT NOT NULL,
               reason TEXT,
               at TIMESTAMPTZ NOT NULL DEFAULT now(),
               moderator_id BIGINT
@@ -40,16 +38,24 @@ class ShameQueries:
 
     @staticmethod
     async def _ensure_row(conn: asyncpg.Connection, user_id: int) -> None:
+        """Ensure user exists in shame_stats. user_id must be int."""
         await conn.execute(
-            "INSERT INTO shame_stats(user_id) VALUES($1) ON CONFLICT (user_id) DO NOTHING", user_id
+            "INSERT INTO shame_stats(user_id) VALUES($1) ON CONFLICT (user_id) DO NOTHING", 
+            user_id
         )
 
     @staticmethod
     async def add_event(
-        pool: asyncpg.Pool, *, user_id: int, kind: str, reason: str | None, moderator_id: int | None
+        pool: asyncpg.Pool, *, 
+        user_id: int,  # Must be int
+        kind: str, 
+        reason: str | None, 
+        moderator_id: int | None  # Must be int
     ) -> None:
+        """Add shame event. user_id and moderator_id must be int."""
         kind = kind if kind in ("warn", "kick", "ban", "timeout") else "warn"
         col = {"warn": "warnings", "kick": "kicks", "ban": "bans", "timeout": "timeouts"}[kind]
+        
         async with pool.acquire() as conn:
             await ShameQueries._ensure_row(conn, user_id)
             await conn.execute(
@@ -60,8 +66,8 @@ class ShameQueries:
             )
             await conn.execute(
                 """
-            INSERT INTO shame_events(user_id,kind,reason,moderator_id)
-            VALUES ($1,$2,$3,$4)
+            INSERT INTO shame_events(user_id, kind, reason, at, moderator_id)
+            VALUES ($1,$2,$3,now(),$4)
             """,
                 user_id,
                 kind,
@@ -70,24 +76,8 @@ class ShameQueries:
             )
 
     @staticmethod
-    async def stats(pool: asyncpg.Pool, user_id: int) -> dict[str, Any] | None:
+    async def get_stats(pool: asyncpg.Pool, user_id: int) -> dict[str, Any] | None:
+        """Get user shame stats. user_id must be int."""
         async with pool.acquire() as conn:
             row = await conn.fetchrow("SELECT * FROM shame_stats WHERE user_id=$1", user_id)
         return dict(row) if row else None
-
-    @staticmethod
-    async def leaderboard(
-        pool: asyncpg.Pool, by: str = "warnings", limit: int = 10
-    ) -> list[dict[str, Any]]:
-        by = by if by in ("warnings", "kicks", "bans", "timeouts") else "warnings"
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(
-                f"""
-            SELECT user_id,warnings,kicks,bans,timeouts,last_event_at
-              FROM shame_stats
-             ORDER BY {by} DESC, last_event_at DESC
-             LIMIT $1
-            """,
-                limit,
-            )
-        return [dict(r) for r in rows]

@@ -1,8 +1,6 @@
 # bot/database/queries/economy_queries.py
 from __future__ import annotations
-
 from typing import Any
-
 import asyncpg
 
 
@@ -30,7 +28,7 @@ class EconomyQueries:
             CREATE TABLE IF NOT EXISTS xp_events(
               id BIGSERIAL PRIMARY KEY,
               user_id BIGINT NOT NULL,
-              kind TEXT NOT NULL,           -- 'message' | 'reaction_received' | 'admin_adjust' | 'gamble' | 'shop'
+              kind TEXT NOT NULL,
               delta_xp INT NOT NULL,
               delta_points INT NOT NULL,
               meta TEXT,
@@ -44,9 +42,11 @@ class EconomyQueries:
 
     @staticmethod
     async def _ensure_row(conn: asyncpg.Connection, user_id: int) -> None:
+        """Ensure user exists in xp_stats table."""
         await conn.execute(
             """
-        INSERT INTO xp_stats(user_id) VALUES($1)
+        INSERT INTO xp_stats(user_id, daily_xp, daily_xp_date) 
+        VALUES($1, 0, CURRENT_DATE)
         ON CONFLICT (user_id) DO NOTHING
         """,
             user_id,
@@ -54,6 +54,7 @@ class EconomyQueries:
 
     @staticmethod
     async def add_message_xp(pool: asyncpg.Pool, user_id: int, xp: int, points: int) -> None:
+        """Add XP and points for a message. user_id must be int."""
         async with pool.acquire() as conn:
             await EconomyQueries._ensure_row(conn, user_id)
             await conn.execute(
@@ -63,7 +64,7 @@ class EconomyQueries:
                    points = points + $3,
                    messages = messages + 1,
                    daily_xp = CASE WHEN daily_xp_date = CURRENT_DATE THEN daily_xp + $2 ELSE $2 END,
-                   daily_xp_date = CASE WHEN daily_xp_date = CURRENT_DATE THEN daily_xp_date ELSE CURRENT_DATE END,
+                   daily_xp_date = CURRENT_DATE,
                    last_updated = now()
              WHERE user_id = $1
             """,
@@ -85,6 +86,7 @@ class EconomyQueries:
     async def add_reaction_received(
         pool: asyncpg.Pool, user_id: int, xp: int, points: int, meta: str
     ) -> None:
+        """Add XP for reaction received. user_id must be int."""
         async with pool.acquire() as conn:
             await EconomyQueries._ensure_row(conn, user_id)
             await conn.execute(
@@ -94,7 +96,7 @@ class EconomyQueries:
                    points = points + $3,
                    reactions_received = reactions_received + 1,
                    daily_xp = CASE WHEN daily_xp_date = CURRENT_DATE THEN daily_xp + $2 ELSE $2 END,
-                   daily_xp_date = CASE WHEN daily_xp_date = CURRENT_DATE THEN daily_xp_date ELSE CURRENT_DATE END,
+                   daily_xp_date = CURRENT_DATE,
                    last_updated = now()
              WHERE user_id = $1
             """,
@@ -113,10 +115,9 @@ class EconomyQueries:
                 meta,
             )
 
-    # ----- NEW: balance helpers -----
-
     @staticmethod
     async def get_stats(pool: asyncpg.Pool, user_id: int) -> dict[str, Any] | None:
+        """Get user stats. user_id must be int."""
         async with pool.acquire() as conn:
             row = await conn.fetchrow("SELECT * FROM xp_stats WHERE user_id=$1", user_id)
         return dict(row) if row else None
@@ -130,7 +131,7 @@ class EconomyQueries:
         delta_xp: int = 0,
         meta: str = "adjust",
     ) -> dict[str, Any]:
-        """Atomic points (and optionally XP) adjust; returns updated stats row."""
+        """Atomic points adjustment. user_id must be int."""
         async with pool.acquire() as conn:
             async with conn.transaction():
                 await EconomyQueries._ensure_row(conn, user_id)
@@ -169,7 +170,7 @@ class EconomyQueries:
     async def spend_points(
         pool: asyncpg.Pool, user_id: int, amount: int, *, meta: str
     ) -> dict[str, Any]:
-        """Spend points for gambling or shop; raises if insufficient."""
+        """Spend points. user_id must be int."""
         if amount <= 0:
             raise ValueError("Amount must be > 0")
         return await EconomyQueries.adjust_points(pool, user_id, -amount, delta_xp=0, meta=meta)
@@ -178,6 +179,7 @@ class EconomyQueries:
     async def award_points(
         pool: asyncpg.Pool, user_id: int, amount: int, *, meta: str
     ) -> dict[str, Any]:
+        """Award points. user_id must be int."""
         if amount <= 0:
             return await EconomyQueries.get_stats(pool, user_id) or {
                 "user_id": user_id,
@@ -189,6 +191,7 @@ class EconomyQueries:
     async def leaderboard(
         pool: asyncpg.Pool, by: str = "xp", limit: int = 10
     ) -> list[dict[str, Any]]:
+        """Get leaderboard. Returns list with user_id as BIGINT."""
         by = by if by in ("xp", "points", "messages", "reactions_received") else "xp"
         async with pool.acquire() as conn:
             rows = await conn.fetch(

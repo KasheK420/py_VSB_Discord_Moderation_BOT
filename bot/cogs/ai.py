@@ -181,6 +181,60 @@ class AICog(commands.Cog):
                 )
             await interaction.followup.send(f"❌ Failed to post: {e}", ephemeral=True)
 
+    @app_commands.command(name="ai_reset_user_limit", description="Reset AI usage limits for a user (admin only).")
+    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.describe(
+        user="The user to reset limits for",
+        limit_type="Which limit to reset: hourly, daily, or weekly"
+    )
+    @app_commands.choices(limit_type=[
+        app_commands.Choice(name="Hourly", value="hour"),
+        app_commands.Choice(name="Daily", value="day"),
+        app_commands.Choice(name="Weekly", value="week")
+    ])
+    async def ai_reset_user_limit(self, interaction: Interaction, user: discord.User, limit_type: str):
+        await interaction.response.defer(ephemeral=True)
+        
+        ai_service = get_ai_service()
+        if not ai_service:
+            return await interaction.followup.send("❌ AI service not initialized.", ephemeral=True)
+
+        # Validate limit type
+        if limit_type not in ["hour", "day", "week"]:
+            return await interaction.followup.send("❌ Invalid limit type. Choose 'hourly', 'daily', or 'weekly'.", ephemeral=True)
+
+        # Reset the specified limit
+        try:
+            user_id = str(user.id)
+            if user_id in ai_service.user_events:
+                ai_service.user_events[user_id][limit_type].clear()
+                if self.embed_logger:
+                    await self.embed_logger.log_custom(
+                        service="AI Commands",
+                        title="User Limit Reset",
+                        description=f"<@{interaction.user.id}> reset {limit_type} limit for <@{user_id}>",
+                        level=LogLevel.SUCCESS,
+                        fields={
+                            "Command": "/ai_reset_user_limit",
+                            "Admin": f"<@{interaction.user.id}>",
+                            "Target User": f"<@{user_id}>",
+                            "Limit Type": limit_type.capitalize(),
+                            "Status": "✅ Success",
+                        },
+                    )
+                await interaction.followup.send(f"✅ Cleared {limit_type} limit for <@{user_id}>.", ephemeral=True)
+            else:
+                await interaction.followup.send(f"❌ No usage data found for <@{user_id}>.", ephemeral=True)
+        except Exception as e:
+            logger.exception(f"ai_reset_user_limit failed for user {user.id}")
+            if self.embed_logger:
+                await self.embed_logger.log_error(
+                    service="AI Commands",
+                    error=e,
+                    context=f"ai_reset_user_limit failed - user: {user.id}, limit: {limit_type}",
+                )
+            await interaction.followup.send(f"❌ Failed to reset limit: {e}", ephemeral=True)
+
     @app_commands.command(name="ai_ask", description="Ask the AI anything (short helpful answer).")
     @app_commands.describe(
         prompt="What do you want to ask?",

@@ -11,7 +11,7 @@ from typing import Any
 
 @dataclass
 class User:
-    id: str  # Discord user ID
+    id: int   # Discord user ID
     login: str  # VSB login (e.g., 'abc0123')
     activity: int  # 0=inactive, 1=active
     type: int  # 0=student, 2=teacher
@@ -21,6 +21,7 @@ class User:
     verified_at: datetime | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    discord_id: int | None = None
 
     def to_dict(self) -> dict:
         """Convert user to dictionary"""

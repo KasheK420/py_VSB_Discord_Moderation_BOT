@@ -9,7 +9,7 @@ from typing import Optional
 
 @dataclass
 class DiscordUserStats:
-    discord_id: str
+    discord_id: int   
     first_seen_at: Optional[datetime] = None
     last_seen_at: Optional[datetime] = None
     login_count: int = 0

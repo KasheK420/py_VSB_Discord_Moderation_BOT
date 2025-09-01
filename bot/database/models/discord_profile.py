@@ -9,7 +9,7 @@ from typing import Optional
 
 @dataclass
 class DiscordProfile:
-    discord_id: str
+    discord_id: int   
     username: str
     global_name: Optional[str] = None
     discriminator: Optional[str] = None
