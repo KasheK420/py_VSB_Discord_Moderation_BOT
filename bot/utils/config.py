@@ -65,6 +65,12 @@ class Config:
     teachers_accounts_channel_id: int = int(os.getenv("TEACHERS_ACCOUNTS_CHANNEL_ID", "0"))
     giveaway_channel_id: int = int(os.getenv("GIVEAWAY_CHANNEL_ID", "0"))
     vsb_news_channel_id: int = int(os.getenv("VSB_NEWS_CHANNEL_ID", "0"))
+    
+    # Health Monitor
+    health_channel_id: int = int(os.getenv("HEALTH_CHANNEL_ID", "1333178032327753779") or "1333178032327753779")
+    health_update_interval_s: int = int(os.getenv("HEALTH_UPDATE_INTERVAL_S", "60") or "60")
+    # Optional: scrape Prometheus Node Exporter on the host for real host stats
+    #node_exporter_url: str = os.getenv("NODE_EXPORTER_URL", "")  # e.g. http://host.docker.internal:9100/metrics
 
     # NEW: General channel for public welcomes/farewells (poems)
     general_channel_id: int = int(os.getenv("GENERAL_CHANNEL_ID", "0") or "0")

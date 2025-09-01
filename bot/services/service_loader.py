@@ -191,6 +191,7 @@ async def init_community_cogs(bot: discord.Client, embed_logger: EmbedLogger | N
         from bot.cogs.shop_cog import ShopCog
         from bot.cogs.welcome_cog import WelcomeCog
         from bot.cogs.auth_management_cog import AuthManagementCog
+        from bot.cogs.health_cog import HealthCog
 
         await bot.add_cog(WelcomeCog(bot))
         await bot.add_cog(HallOfFameCog(bot))
@@ -199,6 +200,7 @@ async def init_community_cogs(bot: discord.Client, embed_logger: EmbedLogger | N
         await bot.add_cog(GamblingCog(bot))
         await bot.add_cog(ShopCog(bot))
         await bot.add_cog(CasinoCog(bot))
+        await bot.add_cog(HealthCog(bot, bot.config))
         
         auth_mgmt_cog = AuthManagementCog(
             bot=bot,
@@ -211,17 +213,40 @@ async def init_community_cogs(bot: discord.Client, embed_logger: EmbedLogger | N
         dt = (datetime.utcnow() - t0).total_seconds()
         logger.info(f"Community cogs loaded in {dt:.2f}s")
 
+        try:
+            health_cog = bot.get_cog("HealthCog")
+            health = getattr(health_cog, "health", None)
+            if health:
+                db_ok = database_service.pool is not None
+                health.register_service("Database", ok=db_ok, details="pool ready" if db_ok else "no pool")
+
+                auth_ok = hasattr(bot, "auth_service") and bot.auth_service is not None
+                web_ok = hasattr(bot, "web_server") and bot.web_server is not None
+                onb_ok = get_onboarding() is not None
+                health.register_service("Authentication", ok=auth_ok, details="ready" if auth_ok else "not initialized")
+                health.register_service("Web Server", ok=web_ok, details="running" if web_ok else "not started")
+                health.register_service("Onboarding", ok=onb_ok, details="ready" if onb_ok else "not initialized")
+
+                ai_srv = get_ai_service()
+                ai_ok = bool(ai_srv and ai_srv.groq_api_key)
+                mod = get_moderation()
+                mod_ok = bool(mod and mod.config.get("enabled"))
+                health.register_service("AI Service", ok=ai_ok, details="configured" if ai_ok else "missing key")
+                health.register_service("Moderation", ok=mod_ok, details=f"v{mod.config.get('version','?')}" if mod else "not loaded")
+        except Exception as e:
+            logger.warning(f"Health registry preload failed: {e}")
+
         if embed_logger:
             gen_id = getattr(bot.config, "general_channel_id", 0) or getattr(
                 bot.config, "welcome_channel_id", 0
             )
-            forum_id = getattr(bot.config, "help_center_forum_channel_id", 0)
-            fame_id = getattr(bot.config, "hall_of_fame_channel_id", 0)
-            shame_id = getattr(bot.config, "hall_of_shame_channel_id", 0)
-            gamble_id = getattr(bot.config, "gambling_channel_id", 0)
+            forum_id = getattr(bot.config, "help_forum_channel_id", 0)
+            fame_id = getattr(bot.config, "fame_channel_id", 0)
+            shame_id = getattr(bot.config, "shame_channel_id", 0)
+            gamble_id = getattr(bot.config, "casino_channel_id", 0)
             shop_announce = getattr(bot.config, "shop_announce_channel_id", 0)
-            verify_id = getattr(bot.config, "verification_channel_id", 0)  # NEW
-            
+            verify_id = getattr(bot.config, "verification_channel_id", 0)
+
             await embed_logger.log_custom(
                 service="Service Loader",
                 title="Community Cogs Loaded",
@@ -234,8 +259,9 @@ async def init_community_cogs(bot: discord.Client, embed_logger: EmbedLogger | N
                     "Hall of Shame": f"<#{shame_id}>" if shame_id else "n/a",
                     "Gambling": f"<#{gamble_id}>" if gamble_id else "n/a",
                     "Shop announce": f"<#{shop_announce}>" if shop_announce else "n/a",
-                    "Verification": f"<#{verify_id}>" if verify_id else "n/a",  # NEW
-                    "Auth Management": "✅ Active",  # NEW
+                    "Verification": f"<#{verify_id}>" if verify_id else "n/a",
+                    "Health Monitor": f"<#{getattr(bot.config, 'health_channel_id', 0)}>" if getattr(bot.config, "health_channel_id", 0) else "n/a",
+                    "Auth Management": "✅ Active",
                     "XP/Economy": (
                         "enabled" if getattr(bot.config, "xp_enabled", True) else "disabled"
                     ),
