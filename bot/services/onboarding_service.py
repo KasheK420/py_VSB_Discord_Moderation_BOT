@@ -235,10 +235,6 @@ class OnboardingService:
         self.register_interaction_handler(bot)
 
     def register_interaction_handler(self, bot: discord.Client):
-        """
-        Hook a single on_interaction listener that catches our button clicks.
-        Safe to call multiple times; will only register once per process.
-        """
         if self._interaction_hooked:
             return
 
@@ -250,21 +246,20 @@ class OnboardingService:
                 if not custom_id:
                     return
 
-                # SSO button (handled elsewhere by your OAuth web server typically)
-                if custom_id == "auth_sso":
-                    await self._respond_ephemeral(
-                        interaction,
-                        "🔒 Ověření: otevři odkaz, který ti bot poslal do DM. Pokud nic nepřišlo, "
-                        "zkontroluj soukromí zpráv nebo napiš moderátorům.",
-                        mention=False,
-                    )
-                    return
+                # ❌ REMOVE this whole branch:
+                # if custom_id == "auth_sso":
+                #     await self._respond_ephemeral(
+                #         interaction,
+                #         "🔒 Ověření: otevři odkaz, který ti bot poslal do DM. Pokud nic nepřišlo, "
+                #         "zkontroluj soukromí zpráv nebo napiš moderátorům.",
+                #         mention=False,
+                #     )
+                #     return
 
-                # Role buttons
+                # ✅ ponech jen obsluhu role_* tlačítek:
                 role_info = self._parse_role_custom_id(custom_id)
                 if role_info is None:
-                    return  # not our button
-
+                    return
                 role_type, role_id = role_info
                 await self._handle_role_assignment_interaction(interaction, role_type, role_id)
 
