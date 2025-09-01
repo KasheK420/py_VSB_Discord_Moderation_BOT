@@ -309,8 +309,14 @@ async def init_ai_and_moderation(bot: discord.Client, embed_logger: EmbedLogger 
         logger.info("Initializing smart moderation service...")
         mod_start = datetime.utcnow()
         global _moderation
-        _moderation = SmartModerationService()
+        _moderation = SmartModerationService()          # vytvoř instanci
+
+        # PŘEDEJ embed logger a bota -> setup přidá listenery
         await _moderation.setup(bot, embed_logger)
+
+        # volitelně: ulož na bot pro další cogy
+        setattr(bot, "moderation_service", _moderation)
+
         mod_init_time = (datetime.utcnow() - mod_start).total_seconds()
         logger.info(f"Smart moderation service initialized in {mod_init_time:.2f}s")
     except Exception as e:
@@ -325,6 +331,7 @@ async def init_ai_and_moderation(bot: discord.Client, embed_logger: EmbedLogger 
             except:
                 pass
         # Don't raise - moderation is not critical for basic bot operation
+
 
     # Load community cogs (Welcome + Help-Center)
     try:

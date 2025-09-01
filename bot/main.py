@@ -31,9 +31,10 @@ logger = logging.getLogger(__name__)
 class VSBBot(commands.Bot):
     def __init__(self, config: Config):
         intents = discord.Intents.default()
-        intents.guilds = True
+        intents.message_content = True
         intents.members = True
-        intents.message_content = True  # moderation needs this
+        intents.guilds = True
+        intents.reactions = True
         super().__init__(command_prefix=config.command_prefix, intents=intents)
         self.config = config
         self.db_service = database_service

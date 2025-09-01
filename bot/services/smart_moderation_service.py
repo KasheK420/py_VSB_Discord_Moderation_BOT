@@ -169,15 +169,22 @@ class SmartModerationService:
         with open(config_path, "w", encoding="utf-8") as f:
             json.dump(self.config, f, indent=2)
 
-    async def setup(self, bot: discord.Client, embed_logger: EmbedLogger | None = None):
-        """Initialize the enterprise moderation service"""
+    async def setup(self, bot: discord.Client, embed_logger=None):
         self.bot = bot
         self.embed_logger = embed_logger
 
-        # Register event handlers
-        self.bot.event(self.on_message)
-        self.bot.event(self.on_member_join)
-        self.bot.event(self.on_reaction_add)
+        # připojíme event listenery jistým způsobem
+        self.bot.add_listener(self.on_message, "on_message")
+        self.bot.add_listener(self.on_member_join, "on_member_join")
+        self.bot.add_listener(self.on_reaction_add, "on_reaction_add")
+
+        # volitelně: předpočítej/načti config, napiš info do std logu
+        logger.info(
+            "[Moderation] Initialized: enabled=%s, hard_terms=%d, categories=%d",
+            self.config.get("enabled", True),
+            len(self.config.get("hard_terms", {}).get("hate_slurs", [])),
+            len(self.config.get("bad_words", {})),
+        )
 
         # Start background tasks
         asyncio.create_task(self._cleanup_old_data())
@@ -302,18 +309,41 @@ class SmartModerationService:
             await self._handle_reaction_spam(user, reaction.message.channel)
 
     async def on_message(self, message: discord.Message):
-        """Comprehensive message filtering with hard-filter for slurs."""
+        """Comprehensive message filtering with hard-filter for slurs (robust + noisy)."""
+        # 0) sanity
+        if message.author.bot:
+            logger.debug("[Moderation] skip(bot): %s", message.author.id)
+            return
+        if not message.guild:
+            logger.debug("[Moderation] skip(dm): %s", message.id)
+            return
+        if message.content is None:
+            logger.warning("[Moderation] message.content is None — missing message_content intent?")
+            return
+
+        # 1) Should moderate?
         if not await self._should_moderate_message(message):
+            logger.debug(
+                "[Moderation] skip(should=false): author=%s channel=%s content=%r",
+                message.author.id,
+                getattr(message.channel, "name", "?"),
+                (message.content or "")[:80],
+            )
             return
 
-        # Rate limiting
+        # 2) Rate limit
         if await self._check_rate_limiting(message):
+            logger.info(
+                "[Moderation] ratelimit-hit: author=%s channel=%s",
+                message.author.id,
+                getattr(message.channel, "name", "?"),
+            )
             return
 
-        # Analyze content
+        # 3) Analýza obsahu
         suspicion_score, violations = await self._analyze_message_content(message)
 
-        # HARD FILTER: normalized slurs -> immediate high severity
+        # 4) HARD FILTER: normalizované slury → okamžitě vysoká závažnost
         hard_norm = self._normalize_for_slurs(message.content or "")
         hard_terms = self.config.get("hard_terms", {}).get("hate_slurs", [])
         if any(term in hard_norm for term in hard_terms):
@@ -321,47 +351,60 @@ class SmartModerationService:
             self.user_warnings.setdefault(user_id, [])
             warning = {
                 "timestamp": datetime.utcnow(),
-                "violations": list(set(violations + ["hate_detected"])),
+                "violations": sorted(set(violations + ["hate_detected"])),
                 "severity": "high",
                 "suspicion_score": max(suspicion_score, 50),
                 "ai_reason": "Hard filter matched: hate slur",
                 "message_content": (message.content or "")[:200],
-                "channel": message.channel.name,
+                "channel": getattr(message.channel, "name", "?"),
                 "message_id": message.id,
             }
             self.user_warnings[user_id].append(warning)
-            action = self._determine_action(
-                "high", len(self.user_warnings[user_id]), warning["violations"]
-            )
+            action = self._determine_action("high", len(self.user_warnings[user_id]), warning["violations"])
+            logger.info("[Moderation] hard-slur: author=%s action=%s", message.author.id, action)
             await self._execute_action(message, action, warning)
             if self.embed_logger:
                 await self._log_moderation_incident(message, warning, action)
             return
 
-        # AI only if something looks off and within quota
-        if suspicion_score > 0 and self.ai_calls_today < self.config.get("limits", {}).get(
-            "daily_ai_limit", 500
-        ):
+        # 5) AI volání (s kvótou a správným finally)
+        daily_limit = self.config.get("limits", {}).get("daily_ai_limit", 500)
+        if suspicion_score > 0 and self.ai_calls_today < daily_limit:
             try:
                 self.ai_calls_today += 1
                 ai_result = await moderate_message(message.content)
                 if not ai_result.get("is_appropriate", True):
-                    await self._handle_inappropriate_content(
-                        message, ai_result, violations, suspicion_score
+                    await self._handle_inappropriate_content(message, ai_result, violations, suspicion_score)
+                else:
+                    logger.debug(
+                        "[Moderation] ai-ok: author=%s score=%s viol=%s",
+                        message.author.id, suspicion_score, violations,
                     )
             except Exception as e:
-                logger.error(f"AI moderation failed: {e}")
+                logger.error("AI moderation failed: %s", e)
                 if self.embed_logger:
                     await self.embed_logger.log_error(
                         service="Smart Moderation",
                         error=e,
                         context=f"AI moderation failed for message {message.id} by {message.author.id}",
                     )
-                self.ai_calls_today = max(0, self.ai_calls_today - 1)
-        elif suspicion_score >= self.config.get("review_queues", {}).get(
-            "manual_review_required_threshold", 12
-        ):
-            await self._queue_for_manual_review(message, violations, suspicion_score)
+            finally:
+                self.ai_calls_today = max(0, min(self.ai_calls_today, daily_limit))
+        else:
+            manual_thr = self.config.get("review_queues", {}).get("manual_review_required_threshold", 12)
+            if suspicion_score >= manual_thr:
+                logger.info(
+                    "[Moderation] manual-review: author=%s score=%s viol=%s",
+                    message.author.id, suspicion_score, violations,
+                )
+                await self._queue_for_manual_review(message, violations, suspicion_score)
+            else:
+                logger.debug(
+                    "[Moderation] pass: author=%s score=%s viol=%s",
+                    message.author.id, suspicion_score, violations,
+                )
+
+
 
     async def _should_moderate_message(self, message: discord.Message) -> bool:
         if message.author.bot or not message.guild:
