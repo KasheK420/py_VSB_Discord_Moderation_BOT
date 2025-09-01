@@ -17,7 +17,7 @@ class VerificationAuditQueries:
 
     async def insert(
         self,
-        discord_id: str,
+        discord_id: int,
         login: str,
         cas_username: str,
         state_plaintext: str,
@@ -47,7 +47,7 @@ class VerificationAuditQueries:
             )
             return int(new_id)
 
-    async def recent_for_user(self, discord_id: str, limit: int = 20) -> list[VerificationAudit]:
+    async def recent_for_user(self, discord_id: int, limit: int = 20) -> list[VerificationAudit]:
         sql = """
         SELECT * FROM verification_audit
         WHERE discord_id = $1

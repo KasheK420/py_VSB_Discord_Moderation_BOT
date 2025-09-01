@@ -1,12 +1,11 @@
+# bot/database/queries/user_queries.py
 """
 bot/database/queries/user_queries.py
 User-related database queries for PostgreSQL
 """
 
 import json
-
 import asyncpg
-
 from ..models.user import User
 
 
@@ -14,20 +13,16 @@ class UserQueries:
     def __init__(self, db_pool: asyncpg.Pool):
         self.pool = db_pool
 
-    async def get_user_by_id(self, user_id: str) -> User | None:
-        """Get user by Discord ID"""
-        query = """
-            SELECT * FROM users WHERE id = $1
-        """
+    async def get_user_by_id(self, user_id: int) -> User | None:
+        """Get user by Discord ID (BIGINT)"""
+        query = "SELECT * FROM users WHERE id = $1"
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(query, user_id)
             return User.from_row(dict(row)) if row else None
 
     async def get_user_by_login(self, login: str) -> User | None:
         """Get user by VSB login"""
-        query = """
-            SELECT * FROM users WHERE login = $1
-        """
+        query = "SELECT * FROM users WHERE login = $1"
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(query, login.lower())
             return User.from_row(dict(row)) if row else None
@@ -49,11 +44,10 @@ class UserQueries:
                 updated_at = NOW()
         """
         attributes_json = json.dumps(user.attributes) if user.attributes else None
-
         async with self.pool.acquire() as conn:
             await conn.execute(
                 query,
-                user.id,
+                int(user.id),
                 user.login,
                 user.activity,
                 user.type,
@@ -63,13 +57,9 @@ class UserQueries:
                 user.verified_at,
             )
 
-    async def update_user_activity(self, user_id: str, activity: int) -> None:
+    async def update_user_activity(self, user_id: int, activity: int) -> None:
         """Update user activity status"""
-        query = """
-            UPDATE users 
-            SET activity = $1, updated_at = NOW()
-            WHERE id = $2
-        """
+        query = "UPDATE users SET activity = $1, updated_at = NOW() WHERE id = $2"
         async with self.pool.acquire() as conn:
             await conn.execute(query, activity, user_id)
 

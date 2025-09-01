@@ -11,7 +11,7 @@ from typing import Any
 @dataclass
 class CASAttributesHistory:
     id: int | None
-    discord_id: str
+    discord_id: int
     login: str
     attributes: dict[str, Any]
     received_at: datetime | None = None
@@ -30,7 +30,7 @@ class CASAttributesHistory:
                 attrs = {}
         return cls(
             id=row.get("id"),
-            discord_id=row["discord_id"],
+            discord_id=int(row["discord_id"]),
             login=row["login"],
             attributes=attrs if isinstance(attrs, dict) else {},
             received_at=row.get("received_at"),

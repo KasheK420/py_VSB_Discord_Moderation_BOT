@@ -10,7 +10,7 @@ class DiscordProfileQueries:
     def __init__(self, db_pool: asyncpg.Pool):
         self.pool = db_pool
 
-    async def get(self, discord_id: str) -> DiscordProfile | None:
+    async def get(self, discord_id: int) -> DiscordProfile | None:
         sql = "SELECT * FROM discord_profiles WHERE discord_id = $1"
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(sql, discord_id)
